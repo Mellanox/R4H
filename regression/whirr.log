@@ -1,9 +1,0 @@
-2014-03-25 10:52:48,073 DEBUG [org.apache.commons.configuration.PropertiesConfiguration] (main) Base path set to jar:file:/opt/cloudera/parcels/CDH-4.4.0-1.cdh4.4.0.p0.39/lib/whirr/lib/whirr-core-0.8.2-cdh4.4.0.jar!/
-2014-03-25 10:52:48,074 DEBUG [org.apache.commons.configuration.PropertiesConfiguration] (main) FileName set to whirr-default.properties
-2014-03-25 10:52:48,074 DEBUG [org.apache.commons.configuration.PropertiesConfiguration] (main) URL set to jar:file:/opt/cloudera/parcels/CDH-4.4.0-1.cdh4.4.0.p0.39/lib/whirr/lib/whirr-core-0.8.2-cdh4.4.0.jar!/whirr-default.properties
-2014-03-25 10:53:40,284 DEBUG [org.apache.commons.configuration.PropertiesConfiguration] (main) Base path set to jar:file:/opt/cloudera/parcels/CDH-4.4.0-1.cdh4.4.0.p0.39/lib/whirr/lib/whirr-core-0.8.2-cdh4.4.0.jar!/
-2014-03-25 10:53:40,285 DEBUG [org.apache.commons.configuration.PropertiesConfiguration] (main) FileName set to whirr-default.properties
-2014-03-25 10:53:40,285 DEBUG [org.apache.commons.configuration.PropertiesConfiguration] (main) URL set to jar:file:/opt/cloudera/parcels/CDH-4.4.0-1.cdh4.4.0.p0.39/lib/whirr/lib/whirr-core-0.8.2-cdh4.4.0.jar!/whirr-default.properties
-2014-03-25 10:54:04,835 DEBUG [org.apache.commons.configuration.PropertiesConfiguration] (main) Base path set to jar:file:/opt/cloudera/parcels/CDH-4.4.0-1.cdh4.4.0.p0.39/lib/whirr/lib/whirr-core-0.8.2-cdh4.4.0.jar!/
-2014-03-25 10:54:04,835 DEBUG [org.apache.commons.configuration.PropertiesConfiguration] (main) FileName set to whirr-default.properties
-2014-03-25 10:54:04,835 DEBUG [org.apache.commons.configuration.PropertiesConfiguration] (main) URL set to jar:file:/opt/cloudera/parcels/CDH-4.4.0-1.cdh4.4.0.p0.39/lib/whirr/lib/whirr-core-0.8.2-cdh4.4.0.jar!/whirr-default.properties
