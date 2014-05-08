@@ -18,12 +18,10 @@ if [[ -n "$RAN_DFSIO" ]]; then
 fi
 
 if [[ -n "$RAN_TERAGEN" ]]; then
-    python parseTeraReport.py ${REPORT_PATH_TERAGEN} ${TERAGEN_SHEET_CSV_PATH}
     python processCSV2GraphXlsx_Tera.py -i ${TERAGEN_SHEET_CSV_PATH} -o ${TERAGEN_SHEET_XLSX_PATH}
 fi
 
 if [[ -n "$RAN_TERASORT" ]]; then
-    python parseTeraReport.py ${REPORT_PATH_TERASORT} ${TERASORT_SHEET_CSV_PATH}
     python processCSV2GraphXlsx_Tera.py -i ${TERASORT_SHEET_CSV_PATH} -o ${TERASORT_SHEET_XLSX_PATH}
 fi
 
