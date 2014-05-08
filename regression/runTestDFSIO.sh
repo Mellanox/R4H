@@ -6,19 +6,23 @@ fileSizeSet=$2
 exportResultsToReport()
 {
     if [[ -e "$SHORT_LOG" ]]; then
-            TP=`grep Throughput $SHORT_LOG | cut -d ' ' -f 8 | tr '\n' ' '`
-            TIME=`grep "exec time" $SHORT_LOG | cut -d ' ' -f 9 | tr '\n' ' '`
-        else
+            TP=$(grep Throughput $SHORT_LOG | awk '{ print $3 }')
+            TIME=$(grep "exec time" $SHORT_LOG | awk '{ print $5 }')
+    else
             echo "TestDFSIO FAILED ON ALL ${PROGRAM} ATTEMPTS -- PLACING DUMMY VALUES"
             TP=0
             TIME=0
-        fi
-        echo "Running ${PROGRAM} with ${nrFiles} files of size ${fileSize}MB results: <br>" >> $REPORT_PATH_DFSIO
-        echo "Times: $TIME <br>" >> $REPORT_PATH_DFSIO
-        echo "Throughputs: $TP <br>" >> $REPORT_PATH_DFSIO
-        echo "Failed: $FAILED_ATTEMPTS" >> $REPORT_PATH_DFSIO
-        echo "CPU: $CPU_TIMES" >> $REPORT_PATH_DFSIO
-        echo "<br><br>" >> $REPORT_PATH_DFSIO
+    fi
+    
+    TP_MIN=$(echo "$TP" | sort -n | head -n 1)
+    TP_MAX=$(echo "$TP" | sort -n | tail -n 1)
+    TP_AVG=$(echo "$TP" | awk 'BEGIN{ n=0; sum=0; } { sum+=$1; n++ } END{ print sum/n }')
+    TIME_MIN=$(echo "$TIME" | sort -n | head -n 1)
+    TIME_MAX=$(echo "$TIME" | sort -n | tail -n 1)
+    TIME_AVG=$(echo "$TIME" | awk 'BEGIN{ n=0; sum=0; } { sum+=$1; n++ } END{ print sum/n }')
+    
+    echo "${PROGRAM},${nrFiles}_files,${fileSize}MB,${TIME_MIN},${TIME_MAX},${TIME_AVG},${TP_MIN},${TP_MAX},${TP_AVG},${FAILED_ATTEMPTS},${CPU_TIMES}" >> ${DFS_SHEET_CSV_PATH}
+        
 }
 
 runJob()
@@ -31,7 +35,7 @@ runJob()
     if (($succ != 0)); then
         FAILED_ATTEMPTS=$((FAILED_ATTEMPTS+1))
     else
-        FAILED_KILLED_MAPPERS=`mapred job -history ${DFSIO_WRITE_PATH} | grep -A 8 "Task Summary" | grep "Map" | awk '{print $4 + $5}'`
+        FAILED_KILLED_MAPPERS=$(mapred job -history ${DFSIO_WRITE_PATH} | grep -A 8 "Task Summary" | grep "Map" | awk '{print $4 + $5}')
         FAILED_ATTEMPTS=$((FAILED_ATTEMPTS+FAILED_KILLED_MAPPERS))
     fi
     pdsh -w $SLAVES sync
@@ -51,21 +55,22 @@ killDstat()
 
 reduceDstat()
 {
-    FILES=`ls ${DSTAT_TMP_PATH}`
+    FILES=$(ls ${DSTAT_TMP_PATH})
     SUM_FILE="${DSTAT_TMP_PATH}/summary.csv"
     for file in ${FILES}
     do
         cat ${DSTAT_TMP_PATH}/${file} >> ${SUM_FILE}
     done
     
-    CPU_TIMES=`awk -f reduce-dstat.awk ${SUM_FILE}`
+    CPU_TIMES=$(awk -f reduce-dstat.awk ${SUM_FILE})
     
     # Temporary - get 100-IDLETIME
-    CPU_TIMES=`echo ${CPU_TIMES} | awk 'BEGIN{ FS="," } { print 100-$3 }'`
+    CPU_TIMES=$(echo ${CPU_TIMES} | awk 'BEGIN{ FS="," } { print 100-$3 }')
     
     rm -rf ${DSTAT_TMP_PATH}/*.csv
 }
 
+echo "program,numOfFiles,fileSize,min time,max time,avg time,min TP,max TP,avg TP,failed attempts,avg cpu" >> ${DFS_SHEET_CSV_PATH}
 
 echo "Changing hdfs /user permissions to 777..." | tee -a $LONG_LOG
 sudo -u hdfs hdfs dfs -chmod -R 777 /user

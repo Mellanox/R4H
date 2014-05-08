@@ -13,9 +13,6 @@ TAR_PATH="${LOG_DIR}/${jobName}.tgz"
 
 # Parsing Results Phase
 if [[ -n "$RAN_DFSIO" ]]; then
-    # Parse Report To CSV
-    python parseDFSIOReport.py ${REPORT_PATH_DFSIO} ${DFS_SHEET_CSV_PATH}
-
     # Process CSV to Excel with Graphs (xlsx)
     python processCSV2GraphXlsx_DFSIO.py -i ${DFS_SHEET_CSV_PATH} -o ${DFS_SHEET_XLSX_PATH}
 fi
