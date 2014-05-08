@@ -3,7 +3,7 @@
 import sys, os
 
 class TestResult:
-    def __init__(self, program, numOfFiles, fileSize, times, tp, failedAttempts):
+    def __init__(self, program, numOfFiles, fileSize, times, tp, failedAttempts, cpuTime):
         self.program = program
         self.numOfFiles = numOfFiles
         self.fileSize = fileSize
@@ -16,9 +16,10 @@ class TestResult:
         self.avgTP = sum(tp)/len(tp)
         self.minTP = min(tp)
         self.maxTP = max(tp)
+        self.cpuTime = cpuTime
     
     def __str__(self):
-        return self.program+','+str(self.numOfFiles)+'_files,'+str(self.fileSize)+','+str(self.minTime)+','+str(self.maxTime)+','+str(self.avgTime)+','+str(self.minTP)+','+str(self.maxTP)+','+str(self.avgTP)+','+str(self.failedAttempts)
+        return self.program+','+str(self.numOfFiles)+'_files,'+str(self.fileSize)+','+str(self.minTime)+','+str(self.maxTime)+','+str(self.avgTime)+','+str(self.minTP)+','+str(self.maxTP)+','+str(self.avgTP)+','+str(self.failedAttempts)+','+str(self.cpuTime)
         
 
 if len(sys.argv) < 3:
@@ -32,7 +33,7 @@ if os.path.isfile(outputFile):
 inputStream = open(inputFile,'r')
 outputStream = open(outputFile,'a')
 
-outputStream.write('program,numOfFiles,fileSize,min time,max time,avg time,min TP,max TP,avg TP,failed attempts\n')
+outputStream.write('program,numOfFiles,fileSize,min time,max time,avg time,min TP,max TP,avg TP,failed attempts,avg cpu\n')
 
 text = inputStream.readlines()
 
@@ -52,13 +53,17 @@ while row < len(text):
         tp = map(float,splitLine[1:-2])
         row = row + 1
         splitLine = text[row].split(' ')
-        failedAttempts = splitLine[1]
+        failedAttempts = splitLine[1].strip()
+        row = row + 1
+        splitLine = text[row].split(' ')
+        cpuTime = splitLine[1].strip()
+        row = row + 1
         if len(tp) == 0 or len(times) == 0:
             row = row + 1
             continue
-        current = TestResult(program, numOfFiles, fileSize, times, tp, failedAttempts)
+        current = TestResult(program, numOfFiles, fileSize, times, tp, failedAttempts, cpuTime)
         tests.append(current)
-        outputStream.write(str(current))
+        outputStream.write(str(current)+'\n')
     row = row+1
 
 '''

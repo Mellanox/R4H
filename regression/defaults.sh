@@ -3,7 +3,7 @@
 
 export DATE=`date +%Y-%m-%d_%H%M`
 export CM_HOST="r-sw-fatty01"
-export SLAVES="r-sw-fatty01,r-sw-fatty02,r-sw-fatty03,r-sw-fatty04,r-sw-fatty05,r-sw-fatty06,r-sw-fatty07"
+export SLAVES="r-sw-fatty02,r-sw-fatty03,r-sw-fatty04,r-sw-fatty05,r-sw-fatty06,r-sw-fatty07"
 export JXIO_JAR_PATH="/tmp/jxio.jar"
 export R4H_JAR_PATH="/tmp/r4h.jar"
 export HADOOP_VERSION=`hadoop version | head -n 1`
@@ -33,6 +33,7 @@ export MAILING_LIST="eladi@mellanox.com,alexr@mellanox.com,yuriya@mellanox.com,i
 export MAIL_SUBJECT="Daily R4H Regression Report - `date`"
 export TERAGEN_PATH="/teragen"
 export TERASORT_PATH="/terasort"
+export DSTAT_TMP_PATH="/.autodirect/acclgwork/ufa/tmp"
 export DFS_REPLICATION="1"
 export SLEEP_TIME="36000"
 export USAGE_MESSAGE="Usage: bash $0 [OPTIONS]
