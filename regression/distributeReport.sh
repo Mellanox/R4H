@@ -72,6 +72,8 @@ subject="${MAIL_SUBJECT}"
 echo "Sending mail..."
 python mailSenderUFA.py "$subject" "$message" "`date`" "$USER" "$MAILING_LIST" "${TAR_PATH}" "${DFS_SHEET_XLSX_PATH}" "${TERAGEN_SHEET_XLSX_PATH}" "${TERASORT_SHEET_XLSX_PATH}" "${DFSIOE_SHEET_XLSX_PATH}" "${REPORT_PATH_ERROR}"
 
+sleep 5
+
 # Finalize
 if [[ "$tarstatus" != "0" ]]; then
     echo "Error creating tgz file. Keeping log directory."

@@ -2,8 +2,8 @@
 # Default configuration
 
 export DATE=`date +%Y-%m-%d_%H%M`
-export CM_HOST="r-sw-fatty01"
-export SLAVES="r-sw-fatty02,r-sw-fatty03,r-sw-fatty04,r-sw-fatty05,r-sw-fatty06,r-sw-fatty07"
+export CM_HOST="r-aa-fatty01"
+export SLAVES="r-aa-fatty02,r-aa-fatty03,r-aa-fatty04,r-aa-fatty05,r-aa-fatty06,r-aa-fatty07"
 export JXIO_JAR_PATH="/tmp/jxio.jar"
 export R4H_JAR_PATH="/tmp/r4h.jar"
 export HADOOP_VERSION=`hadoop version | head -n 1`
