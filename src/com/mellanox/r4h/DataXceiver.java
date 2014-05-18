@@ -179,20 +179,14 @@ class DataXceiver extends Receiver {
 								processPacketReply(fmsg);
 							} catch (Throwable t) {
 								LOG.error("Failed to process async packet reply. ", t);
-								if (DataXceiver.this.serverSession != null) {
-									DataXceiver.this.serverSession.close();
-									DataXceiver.this.serverSession = null;
-								}
+								AsyncCloseServerSession();
 							}
 						}
 					});
 				}
 			} catch (Throwable t) {
 				LOG.error("Failed to process reply. ", t);
-				if (DataXceiver.this.serverSession != null) {
-					DataXceiver.this.serverSession.close();
-					DataXceiver.this.serverSession = null;
-				}
+				AsyncCloseServerSession();
 			}
 		}
 
@@ -514,32 +508,28 @@ class DataXceiver extends Receiver {
 			// file and finalize the block before responding success
 			if (pipelinePktContext.isLastPacketInBlock()) {
 				blockReceiver.finalizeBlock();
-				if (DataXceiver.this.clientSession != null) {
-					DataXceiver.this.clientSession.close();
-					DataXceiver.this.clientSession = null;
-				}
+				AsyncCloseClientSession();
 			}
-			replyPipelineAck(origMsg, expected, ack, SUCCESS);
+			replyPipelineAck(origMsg, expected, ack, SUCCESS, true);
 		} catch (Throwable e) {
 			LOG.error("Failed during processing packet reply: " + blockReceiver.getBlock() + " " + oprHeader.getNumTargets() + " Exception "
 			        + StringUtils.stringifyException(e));
 			if (clientSession != null) {
-				DataXceiver.this.clientSession.close();
-				DataXceiver.this.clientSession = null;
+				AsyncCloseClientSession();
 			}
 		} finally {
 			if (serverSession != null) {
 				if (!readAckfields) {
 					replyBrokenPipelineAck(origMsg, expected);
 				} else if ((clientSession == null) && (!pipelinePktContext.isLastPacketInBlock())) {
-					replyPipelineAck(origMsg, expected, ack, ERROR);
+					replyPipelineAck(origMsg, expected, ack, ERROR, true);
 				}
 			}
 		}
 	}
 
-	private void replyPipelineAck(Msg origMsg, long expectedSeqno, PipelineAck ack, Status s) throws IOException {
-		replyPacketAck(origMsg, preparePipelineAck(expectedSeqno, ack, s), false);
+	private void replyPipelineAck(Msg origMsg, long expectedSeqno, PipelineAck ack, Status s, boolean async) throws IOException {
+		replyPacketAck(origMsg, preparePipelineAck(expectedSeqno, ack, s), async);
 	}
 
 	private PipelineAck preparePipelineAck(long expectedSeqno, PipelineAck ack, Status s) {
@@ -760,5 +750,31 @@ class DataXceiver extends Receiver {
 	void setServerPortalWorker(ServerPortalWorker spw) {
 		this.serverPortalWorker = spw;
 	}
+	
+	private void AsyncCloseServerSession() {
+		serverPortalWorker.queueAsyncRunnable(new Runnable() {
+
+			@Override
+			public void run() {
+				if (DataXceiver.this.serverSession != null) {
+					DataXceiver.this.serverSession.close();
+					DataXceiver.this.serverSession = null;
+				}
+			}
+		});
+	}
+	private void AsyncCloseClientSession() {
+		serverPortalWorker.queueAsyncRunnable(new Runnable() {
+
+			@Override
+			public void run() {
+				if (DataXceiver.this.clientSession != null) {
+					DataXceiver.this.clientSession.close();
+					DataXceiver.this.clientSession = null;
+				}
+			}
+		});
+	}
+
 
 }

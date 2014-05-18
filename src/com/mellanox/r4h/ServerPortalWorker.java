@@ -112,6 +112,11 @@ public class ServerPortalWorker {
 		}
 	}
 
+	public void queueAsyncRunnable(Runnable task) {
+		asyncOprQueue.add(task);
+		eqh.breakEventLoop();
+	}
+
 
 
 }
