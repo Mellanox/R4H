@@ -17,44 +17,101 @@
 
 package com.mellanox.r4h;
 
+import java.io.IOException;
 import java.net.URI;
+import java.nio.ByteBuffer;
+import java.util.LinkedList;
+import java.util.concurrent.ConcurrentLinkedQueue;
 
 import com.mellanox.jxio.EventQueueHandler;
 import com.mellanox.jxio.Msg;
 import com.mellanox.jxio.MsgPool;
 import com.mellanox.jxio.ServerPortal;
+import com.mellanox.jxio.ServerSession;
 
-class ServerPortalWorker {
-	private Thread th;
-	private MsgPool serverMsgPool;
-	EventQueueHandler eqh;
-	MsgPool mirrorMsgPool;
-	ServerPortal sp;
+public class ServerPortalWorker {
+	private final Thread th;
+	private final MsgPool serverMsgPool;
+	final EventQueueHandler eqh;
+	final ServerPortal sp;
+	private final LinkedList<ByteBuffer> ioBufferPool = new LinkedList<>();
+	private final ConcurrentLinkedQueue<Runnable> asyncOprQueue = new ConcurrentLinkedQueue<>();
+
+	Runnable onEqhBreak = new Runnable() {
+		@Override
+		public void run() {
+			processReplies();
+		}
+	};
 	
+	private class AsyncReply implements Runnable {
+		final ServerSession session;
+		final Msg msg;
+
+		AsyncReply(ServerSession ss, Msg msg) {
+			this.session = ss;
+			this.msg = msg;
+		}
+
+		@Override
+		public void run() {
+			session.sendResponse(msg);
+		}
+	}
+
 	ServerPortalWorker(URI uri, int numOfMsgsToBind, int msgInSize, int msgOutSize) {
 		this.serverMsgPool = new MsgPool(numOfMsgsToBind + R4HProtocol.JX_SERVER_SPARE_MSGS, msgInSize, msgOutSize);
-		this.mirrorMsgPool = new MsgPool(numOfMsgsToBind, msgOutSize, msgInSize); // Temporary till JX mirror feature
-		this.eqh = new R4HEventHandler(null,null);
+		this.eqh = new R4HEventHandler(null, onEqhBreak);
 		this.eqh.bindMsgPool(serverMsgPool);
 		this.sp = new ServerPortal(eqh, uri);
 		this.th = new Thread(eqh);
+
+		for (int j = 0; j < numOfMsgsToBind; j++) {
+			ioBufferPool.add(ByteBuffer.allocate(msgInSize));
+			// TODO: allocate one big ByteBuffer and slice it.
+		}
 	}
 
 	void start() {
 		th.start();
 	}
 
-	/*
-	 * Temporary API for retrieving msg from mirror client MsgPool
-	 * It won't be needed after aligning to JXIO's mirror feature
-	 */
-	Msg getMsg() {
-		return mirrorMsgPool.getMsg();
-	}
-
 	@Override
 	public String toString() {
-		return String
-		        .format("ServerPortalWorker{thread='%s', sp='%s', serverMsgPool='%s', mirrorMsgPool='%s'}", th, sp, serverMsgPool, mirrorMsgPool);
+		return String.format("ServerPortalWorker{thread='%s', sp='%s', serverMsgPool='%s', ioBufferPool='%s'}", th, sp, serverMsgPool, ioBufferPool);
 	}
+
+	public synchronized ByteBuffer getAsyncIOBuffer() throws IOException {
+		ByteBuffer buff = ioBufferPool.poll();
+		if (buff == null) {
+			throw new IOException("No more buffers for async IO");
+		}
+		buff.clear();
+		return buff;
+	}
+
+	public synchronized void returnCurrAsyncIOBuffer(ByteBuffer buff) {
+		if (buff != null) {
+			buff.clear();
+			ioBufferPool.add(buff);
+		}
+	}
+	
+	public void queueAsyncReply(ServerSession ss, Msg msg) {
+		asyncOprQueue.add(new AsyncReply(ss, msg));
+		// if (msgReplyQueue.size() >= REPLY_QUEUE_TRESHOLD_FOR_BREAK_EVENT_LOOP) {
+		eqh.breakEventLoop();
+		// }
+	}
+	
+	void processReplies() {
+		Runnable opr = asyncOprQueue.poll();
+		while (opr != null) {
+			opr.run();
+			opr = asyncOprQueue.poll();
+		}
+	}
+
+
+
 }

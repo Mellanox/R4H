@@ -93,44 +93,35 @@ class DataXceiver extends Receiver {
 	private ExecutorService packetAsyncIOExecutor;
 	private ExecutorService asyncRequestExecutor;
 	private String uri;
+	private ServerPortalWorker serverPortalWorker;
 
 	class SSCallbacks implements ServerSession.Callbacks {
 		@Override
 		public void onRequest(Msg msg) {
-			// provide DXCS with current context to send replies of previous requests
-			DataXceiver.this.dxcs.processReplies();
-			onRequestAsync(msg);
-		}
+			currRequestTSNano = System.nanoTime();
+			currMsg = msg;
+			if (LOG.isTraceEnabled()) {
+				LOG.trace("got request message");
+			}
+			try {
 
-		private void onRequestAsync(final Msg msg) {
-			asyncRequestExecutor.execute(new Runnable() {
-
-				@Override
-				public void run() {
-					currRequestTSNano = System.nanoTime();
-					currMsg = msg;
+				if (isFirstRequest) {
+					LOG.info("Going to process pipeline reply for OPR header. uri=" + DataXceiver.this.uri);
+					processOPRHeaderRequest(msg);
+				} else {
 					if (LOG.isTraceEnabled()) {
-						LOG.trace("got request message");
+						LOG.trace("Going to process packet message");
 					}
-					try {
-
-						if (isFirstRequest) {
-							LOG.info("Going to process pipeline reply for OPR header. uri=" + DataXceiver.this.uri);
-							processOPRHeaderRequest(msg);
-						} else {
-							if (LOG.isTraceEnabled()) {
-								LOG.trace("Going to process packet message");
-							}
-							processPacketRequest(msg);
-						}
-
-					} catch (Throwable t) {
-						LOG.error("DataXceiver exception during processing request.", t);
-						AsyncCloseServerSession();
-					}
+					processPacketRequest(msg);
 				}
-			});
 
+			} catch (Throwable t) {
+				LOG.error("DataXceiver exception during processing request.", t);
+				if (DataXceiver.this.serverSession != null) {
+					DataXceiver.this.serverSession.close();
+					DataXceiver.this.serverSession = null;
+				}
+			}
 		}
 
 		@Override
@@ -148,12 +139,14 @@ class DataXceiver extends Receiver {
 			String logmsg = String.format("Server Session event: event=%s reason=%s ss=%s uri=%s", session_event, reason, serverSession, uri);
 			switch (session_event) {
 				case SESSION_CLOSED:
-					//TODO: if last packet received then info , else error
+					// TODO: if last packet received then info , else error
 					LOG.info(logmsg);
+					dxcs.onSessionClosed(serverSession);
 					break;
 				case SESSION_ERROR:
 				case SESSION_REJECT:
 					LOG.error(logmsg);
+					dxcs.onSessionClosed(serverSession);
 					break;
 				default:
 					break;
@@ -165,50 +158,47 @@ class DataXceiver extends Receiver {
 	class CSCallbacks implements ClientSession.Callbacks {
 		@Override
 		public void onResponse(Msg msg) {
-			onResponseAsync(msg);
-		}
+			if (LOG.isTraceEnabled()) {
+				LOG.trace("Got reply from pipeline client - " + clientSession);
+			}
+			try {
+				if (isFirstReply) {
+					firstMsg = msg;
+					LOG.info("Going to process pipeline reply for OPR header. uri=" + DataXceiver.this.uri);
+					processOPRHeaderReply(msg);
+				} else {
+					final Msg fmsg = msg;
+					packetAsyncIOExecutor.execute(new Runnable() {
 
-		private void onResponseAsync(final Msg msg) {
-			asyncRequestExecutor.execute(new Runnable() {
-				@Override
-				public void run() {
-					if (LOG.isTraceEnabled()) {
-						LOG.trace("Got reply from pipeline client - " + clientSession);
-					}
-					try {
-						if (isFirstReply) {
-							firstMsg = msg;
-							LOG.info("Going to process pipeline reply for OPR header. uri=" + DataXceiver.this.uri);
-							processOPRHeaderReply(msg);
-						} else {
-							packetAsyncIOExecutor.execute(new Runnable() {
-
-								@Override
-								public void run() {
-									try {
-										if (LOG.isTraceEnabled()) {
-											LOG.trace("Going to process pipeline reply for packet");
-										}
-										processPacketReply(msg);
-									} catch (Throwable t) {
-										LOG.error("Failed to process async packet reply. ", t);
-										AsyncCloseServerSession();
-									}
+						@Override
+						public void run() {
+							try {
+								if (LOG.isTraceEnabled()) {
+									LOG.trace("Going to process pipeline reply for packet");
 								}
-							});
+								processPacketReply(fmsg);
+							} catch (Throwable t) {
+								LOG.error("Failed to process async packet reply. ", t);
+								if (DataXceiver.this.serverSession != null) {
+									DataXceiver.this.serverSession.close();
+									DataXceiver.this.serverSession = null;
+								}
+							}
 						}
-					} catch (Throwable t) {
-						LOG.error("Failed to process reply. ", t);
-						AsyncCloseServerSession();
-					}
+					});
 				}
-			});
-
+			} catch (Throwable t) {
+				LOG.error("Failed to process reply. ", t);
+				if (DataXceiver.this.serverSession != null) {
+					DataXceiver.this.serverSession.close();
+					DataXceiver.this.serverSession = null;
+				}
+			}
 		}
 
 		@Override
 		public void onSessionEstablished() {
-			LOG.info("Client session established: " + clientSession + ", uri="+uri);
+			LOG.info("Client session established: " + clientSession + ", uri=" + uri);
 		}
 
 		@Override
@@ -303,7 +293,7 @@ class DataXceiver extends Receiver {
 		if (oprHeader.isDatanode() || oprHeader.getStage() != BlockConstructionStage.PIPELINE_CLOSE_RECOVERY) {
 			// open a block receiver
 			try {
-				blockReceiver = new BlockReceiverBridge(oprHeader, in, serverSession.toString(), dnBridge, packetAsyncIOExecutor);
+				blockReceiver = new BlockReceiverBridge(serverPortalWorker, oprHeader, in, serverSession.toString(), dnBridge, packetAsyncIOExecutor);
 				blockReceiver.setAsyncFileOutputStreams();
 			} catch (SecurityException | NoSuchFieldException | IllegalArgumentException | IllegalAccessException | NoSuchMethodException e) {
 				throw new IOException("Failed on BlockReceiver creation", e);
@@ -403,7 +393,7 @@ class DataXceiver extends Receiver {
 					public void run() {
 						Status status = ERROR;
 						try {
-							BlockReceiverBridge.returnCurrPacketCopyBuffer(curCopyBuff);
+							serverPortalWorker.returnCurrAsyncIOBuffer(curCopyBuff);
 
 							if (LOG.isTraceEnabled()) {
 								LOG.trace("In last async IO opr for packet");
@@ -428,7 +418,7 @@ class DataXceiver extends Receiver {
 								// if (LOG.isTraceEnabled()) {
 								// LOG.trace("Going to queue reply ack:\npkt=" + pkt + "\nack=" + replyAck);
 								// }
-								replyPacketAck(msg, replyAck);
+								replyPacketAck(msg, replyAck, true);
 							} catch (Throwable t) {
 								LOG.error("Failed on submiting a reply ack: " + StringUtils.stringifyException(t));
 							}
@@ -445,7 +435,7 @@ class DataXceiver extends Receiver {
 					@Override
 					public void run() {
 						try {
-							BlockReceiverBridge.returnCurrPacketCopyBuffer(curCopyBuff);
+							serverPortalWorker.returnCurrAsyncIOBuffer(curCopyBuff);
 						} catch (Throwable t) {
 							LOG.error("Failed on last async processing for pipeline request while trying to set msg context seqno", t);
 						}
@@ -457,11 +447,6 @@ class DataXceiver extends Receiver {
 		} catch (Exception e) {
 			handlePacketProcessingException(msg, e);
 		}
-	}
-
-	protected void submitAsyncReply(Msg msg, Status error) {
-		// TODO Auto-generated method stub
-
 	}
 
 	private void handlePacketProcessingException(Msg msg, Exception e) {
@@ -478,7 +463,7 @@ class DataXceiver extends Receiver {
 				replies[0] = SUCCESS;
 				replies[1] = ERROR;
 				PipelineAck replyAck = new PipelineAck(pkt.getSeqno(), replies);
-				replyPacketAck(msg, replyAck);
+				replyPacketAck(msg, replyAck, false);
 			} catch (IOException e1) {
 				LOG.error("Failed to replyNack: " + StringUtils.stringifyException(e1));
 			}
@@ -487,8 +472,9 @@ class DataXceiver extends Receiver {
 			LOG.warn("Cannot reply response while handling packet processing exception because pkt header is NULL");
 		}
 
-		if (hasSessionClient()) {
-			AsyncCloseClientSession();
+		if (DataXceiver.this.clientSession != null) {
+			DataXceiver.this.clientSession.close();
+			DataXceiver.this.clientSession = null;
 		}
 	}
 
@@ -528,14 +514,18 @@ class DataXceiver extends Receiver {
 			// file and finalize the block before responding success
 			if (pipelinePktContext.isLastPacketInBlock()) {
 				blockReceiver.finalizeBlock();
-				AsyncCloseClientSession();
+				if (DataXceiver.this.clientSession != null) {
+					DataXceiver.this.clientSession.close();
+					DataXceiver.this.clientSession = null;
+				}
 			}
 			replyPipelineAck(origMsg, expected, ack, SUCCESS);
 		} catch (Throwable e) {
 			LOG.error("Failed during processing packet reply: " + blockReceiver.getBlock() + " " + oprHeader.getNumTargets() + " Exception "
 			        + StringUtils.stringifyException(e));
 			if (clientSession != null) {
-				AsyncCloseClientSession();
+				DataXceiver.this.clientSession.close();
+				DataXceiver.this.clientSession = null;
 			}
 		} finally {
 			if (serverSession != null) {
@@ -548,53 +538,8 @@ class DataXceiver extends Receiver {
 		}
 	}
 
-	private void AsyncCloseClientSession() {
-		dxcs.queueAsyncRunnable(new Runnable() {
-
-			@Override
-			public void run() {
-				if (DataXceiver.this.clientSession != null) {
-					DataXceiver.this.clientSession.close();
-					DataXceiver.this.clientSession = null;
-				}
-			}
-		});
-	}
-
-	private void AsyncCloseServerSession() {
-		dxcs.queueAsyncRunnable(new Runnable() {
-
-			@Override
-			public void run() {
-				if (DataXceiver.this.serverSession != null) {
-					DataXceiver.this.serverSession.close();
-					DataXceiver.this.serverSession = null;
-				}
-			}
-		});
-	}
-
-	private void AsyncCloseSessions() {
-		dxcs.queueAsyncRunnable(new Runnable() {
-
-			@Override
-			public void run() {
-				if (DataXceiver.this.clientSession != null) {
-					DataXceiver.this.clientSession.close();
-					DataXceiver.this.clientSession = null;
-				}
-
-				if (DataXceiver.this.serverSession != null) {
-					DataXceiver.this.serverSession.close();
-					DataXceiver.this.serverSession = null;
-				}
-
-			}
-		});
-	}
-
 	private void replyPipelineAck(Msg origMsg, long expectedSeqno, PipelineAck ack, Status s) throws IOException {
-		replyPacketAck(origMsg, preparePipelineAck(expectedSeqno, ack, s));
+		replyPacketAck(origMsg, preparePipelineAck(expectedSeqno, ack, s), false);
 	}
 
 	private PipelineAck preparePipelineAck(long expectedSeqno, PipelineAck ack, Status s) {
@@ -617,26 +562,24 @@ class DataXceiver extends Receiver {
 		replies[0] = SUCCESS;
 		replies[1] = ERROR;
 		PipelineAck replyAck = new PipelineAck(expectedSeqno, replies);
-		replyPacketAck(origMsg, replyAck);
+		replyPacketAck(origMsg, replyAck, false);
 	}
 
 	private void sendPktToPipeline(PipelinePacketContext context) throws IOException {
 		Msg mirror = context.getMsg().getMirror(false);
 		mirror.getOut().position(mirror.getOut().limit());
 		mirror.setUserContext(context);
-		// sc.sendRequest(mirror);
-		this.dxcs.queueAsyncRequest(DataXceiver.this, mirror);
+		clientSession.sendRequest(mirror);
 	}
 
 	private void openPipelineConnection() throws URISyntaxException {
 		CSCallbacks csCBs = DataXceiver.this.new CSCallbacks();
-		
+
 		String clientURI = DataXceiver.this.uri.toString();
 		int index = clientURI.indexOf("&clientHash=");
 		URI uri = R4HProtocol.createPipelineURI(oprHeader.getTargets(), clientURI.substring(index));
 		LOG.info("Open a proxy client session: " + uri);
-		// sc = new ClientSession(eqh, uri, csCBs);
-		this.dxcs.queueAsyncPipelineConnection(uri, csCBs, this);
+		clientSession = new ClientSession(eqh, uri, csCBs);
 	}
 
 	private boolean hasSessionClient() {
@@ -651,11 +594,7 @@ class DataXceiver extends Receiver {
 		        oprHeader.getSrcDataNode(), oprHeader.getStage(), oprHeader.getPipelineSize(), oprHeader.getMinBytesRcvd(),
 		        oprHeader.getMaxBytesRcvd(), oprHeader.getLatestGenerationStamp(), oprHeader.getRequestedChecksum());
 		mirrorOut.flush();
-		// sc.sendRequest(mirror);
-		DataXceiver.this.dxcs.queueAsyncRequest(DataXceiver.this, mirror);
-		if (LOG.isTraceEnabled()) {
-			LOG.trace("Queued (async) OPR Header for pipeline session");
-		}
+		clientSession.sendRequest(mirror);
 	}
 
 	private boolean hasPipeline() {
@@ -675,21 +614,23 @@ class DataXceiver extends Receiver {
 		}
 		BlockOpResponseProto.newBuilder().setStatus(status).setFirstBadLink(firstBadNode).build().writeDelimitedTo(replyOut);
 		replyOut.flush();
-		LOG.info("Queing HeaderAckReply for src: " + uri);
-		this.dxcs.queueAsyncReply(serverSession, msg);
-		// ss.sendResponse(currMsg);
+		LOG.info("sending response for src: " + uri);
+		serverSession.sendResponse(msg);
 	}
 
-	private void replyPacketAck(Msg msg, PipelineAck replyAck) throws IOException {
+	private void replyPacketAck(Msg msg, PipelineAck replyAck, boolean async) throws IOException {
 		msg.getOut().clear();
 		OutputStream replyOut = new ByteBufferOutputStream(msg.getOut());
 		replyAck.write(replyOut);
 		replyOut.flush();
-		this.dxcs.queueAsyncReply(serverSession, msg);
-		// ss.sendResponse(msg);
-		// if (LOG.isDebugEnabled()) {
-		// LOG.debug("replyAck=" + replyAck);
-		// }
+		if (async) {
+			this.serverPortalWorker.queueAsyncReply(serverSession, msg);
+		} else {
+			serverSession.sendResponse(msg);
+			// // if (LOG.isDebugEnabled()) {
+			// // LOG.debug("replyAck=" + replyAck);
+			// // }
+		}
 	}
 
 	private void replyHeaderPipelineAck(Msg msg, Status mirrorInStatus, String firstBadLink) throws IOException {
@@ -699,8 +640,7 @@ class DataXceiver extends Receiver {
 		msg.getOut().clear();
 		BlockOpResponseProto.newBuilder().setStatus(mirrorInStatus).setFirstBadLink(firstBadLink).build()
 		        .writeDelimitedTo(new ByteBufferOutputStream(msg.getOut()));
-		this.dxcs.queueAsyncReply(serverSession, msg);
-		// ss.sendResponse(msg);
+		serverSession.sendResponse(msg);
 	}
 
 	ServerSession getSessionServer() {
@@ -708,8 +648,15 @@ class DataXceiver extends Receiver {
 	}
 
 	void close() {
-		AsyncCloseSessions();
-		// TODO: wait for async event for closing ??
+		if (DataXceiver.this.clientSession != null) {
+			DataXceiver.this.clientSession.close();
+			DataXceiver.this.clientSession = null;
+		}
+
+		if (DataXceiver.this.serverSession != null) {
+			DataXceiver.this.serverSession.close();
+			DataXceiver.this.serverSession = null;
+		}
 		// TODO: remove it from DXCServer's dxcList!
 	}
 
@@ -808,6 +755,10 @@ class DataXceiver extends Receiver {
 
 	public ClientSession getClientSession() {
 		return this.clientSession;
+	}
+
+	void setServerPortalWorker(ServerPortalWorker spw) {
+		this.serverPortalWorker = spw;
 	}
 
 }

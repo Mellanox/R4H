@@ -21,11 +21,14 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.Hashtable;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hdfs.server.datanode.BlockReceiverBridge;
 import org.apache.hadoop.hdfs.server.datanode.DataNode;
 import org.apache.hadoop.hdfs.server.datanode.DataNodeBridge;
@@ -58,75 +61,15 @@ class DataXceiverServer implements Runnable {
 	final ServerPortal sp;
 	final DataNodeBridge dnBridge;
 	final EventQueueHandler eqh;
-	private final ConcurrentLinkedQueue<Runnable> asyncOprQueue = new ConcurrentLinkedQueue<>();
 
-	private class AsyncReply implements Runnable {
-		final ServerSession session;
-		final Msg msg;
 
-		AsyncReply(ServerSession ss, Msg msg) {
-			this.session = ss;
-			this.msg = msg;
-		}
-
-		@Override
-		public void run() {
-			if (LOG.isTraceEnabled()) {
-				LOG.trace("Going to send response: serverSession=" + session);
-			}
-			session.sendResponse(msg);
-		}
-	}
-
-	private class AsyncRequest implements Runnable {
-		private final DataXceiver dxc;
-		private final Msg msg;
-
-		AsyncRequest(DataXceiver dxc, Msg msg) {
-			this.dxc = dxc;
-			this.msg = msg;
-		}
-
-		@Override
-		public void run() {
-			ClientSession client = dxc.getClientSession();
-			if (client != null) {
-				if (LOG.isTraceEnabled()) {
-					LOG.trace("Going to send request: clientSession=" + client);
-				}
-				dxc.getClientSession().sendRequest(msg);
-				// synchronized (msg) {
-				// msg.notifyAll();
-				// }
-			} else {
-				LOG.warn("Failed to send async request because of missing client session");
-			}
-
-		}
-	}
-
-	private class AsyncPipelineConnection implements Runnable {
-		private final URI uri;
-		private final DataXceiver.CSCallbacks cbs;
-		private final DataXceiver dxc;
-
-		AsyncPipelineConnection(URI uri, DataXceiver.CSCallbacks cbs, DataXceiver dxc) {
-			this.uri = uri;
-			this.cbs = cbs;
-			this.dxc = dxc;
-		}
-
-		@Override
-		public void run() {
-			if (LOG.isTraceEnabled()) {
-				LOG.trace("Going to creation new client session");
-			}
-			dxc.setClientSession(new ClientSession(DataXceiverServer.this.eqh, this.uri, this.cbs));
-			if (LOG.isTraceEnabled()) {
-				LOG.trace("After new client session: " + dxc.getClientSession());
-			}
-		}
-	}
+	private static final int NUM_OF_PRE_ALLOC_SERVER_PORTAL_WORKERS_DEFAULT = 16;
+	private static final String NUM_OF_PRE_ALLOC_SERVER_PORTAL_WROKERS_PARAM_NAME = "r4h.server.portal.workers";
+	private int numOfServerPortalWorkers;
+	private final URI workerUri;
+	final List<ServerPortalWorker> spPool;
+	final Hashtable<ServerSession, ServerPortalWorker> sessionToWorkerHashtable;
+	private final Hashtable<ServerSession, MsgPool> ssMsgPoolHash = new Hashtable<ServerSession, MsgPool>();
 
 	private class DXSCallbacks implements ServerPortal.Callbacks {
 
@@ -154,7 +97,7 @@ class DataXceiverServer implements Runnable {
 			LOG.info(String.format("New session request from %s (uri=%s)", srcIP, sesKey.getUri()));
 			DataXceiver dxc = new DataXceiver(DataXceiverServer.this, sesKey);
 			DataXceiverServer.this.dxcList.add(dxc);
-			sp.accept(dxc.getSessionServer());
+			attachServerPortalWorker(dxc);
 		}
 
 	}
@@ -165,23 +108,16 @@ class DataXceiverServer implements Runnable {
 		this.uri = new URI(String.format("rdma://%s", dn.getDisplayName()));
 		this.threadGroup = new ThreadGroup("R4H Datanode Threads");
 		LOG.info("Creating DataXceiverServer - uri=" + uri);
-		
-		Runnable onEqhBreak = new Runnable() {
-			@Override
-			public void run() {
-				processReplies();
-			}
-		};
-		
+
 		Callbacks onDynamicMsgPoolAllocation = new EventQueueHandler.Callbacks() {
-			
+
 			@Override
 			public MsgPool getAdditionalMsgPool(int inSize, int outSize) {
 				return allocateServerMsgPool();
 			}
-		}; 
-		
-		this.eqh = new R4HEventHandler(onDynamicMsgPoolAllocation, onEqhBreak);
+		};
+
+		this.eqh = new R4HEventHandler(onDynamicMsgPoolAllocation, null);
 		LOG.debug("Aftet EventQueueHandler creation");
 		DataXceiverServer.DXSCallbacks dxsCbs = this.new DXSCallbacks();
 		this.sp = new ServerPortal(eqh, uri, dxsCbs);
@@ -193,7 +129,21 @@ class DataXceiverServer implements Runnable {
 
 		LOG.trace("writePacketSize=" + dnBridge.getWritePacketSize());
 
-		BlockReceiverBridge.loadStatic();
+		Configuration dnConf = this.dnBridge.getDN().getConf();
+		this.numOfServerPortalWorkers = dnConf.getInt(NUM_OF_PRE_ALLOC_SERVER_PORTAL_WROKERS_PARAM_NAME,
+		        NUM_OF_PRE_ALLOC_SERVER_PORTAL_WORKERS_DEFAULT);
+		LOG.info(String.format("Starting ahead %d server portal worker", numOfServerPortalWorkers));
+		this.sessionToWorkerHashtable = new Hashtable<ServerSession, ServerPortalWorker>();
+		workerUri = new URI(String.format("rdma://%s:0", this.uri.getHost()));
+		this.spPool = new LinkedList<ServerPortalWorker>();
+		for (int i = 0; i < this.numOfServerPortalWorkers; i++) {
+			ServerPortalWorker spw = new ServerPortalWorker(workerUri, R4HProtocol.MAX_SEND_PACKETS + R4HProtocol.JX_SERVER_SPARE_MSGS,
+			        dnBridge.getWritePacketSize() + R4HProtocol.JX_BUF_SPARE , R4HProtocol.ACK_SIZE);
+			spw.start();
+			spPool.add(spw);
+			LOG.info("Started new server portal worker thread: " + spw);
+		}
+
 		LOG.trace(this.toString());
 	}
 
@@ -227,34 +177,35 @@ class DataXceiverServer implements Runnable {
 		        uri, dxcList.size());
 	}
 
-	public void queueAsyncReply(ServerSession ss, Msg msg) {
-		asyncOprQueue.add(new AsyncReply(ss, msg));
-		// if (msgReplyQueue.size() >= REPLY_QUEUE_TRESHOLD_FOR_BREAK_EVENT_LOOP) {
-		eqh.breakEventLoop();
-		// }
-	}
+	synchronized void attachServerPortalWorker(DataXceiver dxc) {
+		ServerPortalWorker spw;
 
-	public void queueAsyncRequest(DataXceiver dxc, Msg mirror) {
-		asyncOprQueue.add(new AsyncRequest(dxc, mirror));
-		eqh.breakEventLoop();
-	}
-
-	public void queueAsyncPipelineConnection(URI uri, CSCallbacks csCBs, DataXceiver dxc) {
-		asyncOprQueue.add(new AsyncPipelineConnection(uri, csCBs, dxc));
-		eqh.breakEventLoop();
-	}
-
-	public void queueAsyncRunnable(Runnable task) {
-		asyncOprQueue.add(task);
-		eqh.breakEventLoop();
-	}
-
-	void processReplies() {
-		Runnable opr = asyncOprQueue.poll();
-		while (opr != null) {
-			opr.run();
-			opr = asyncOprQueue.poll();
+		if (spPool.isEmpty()) {
+			LOG.warn("ServerPortalWorker pool is empty. Allocating&Starting new SPW");
+			spw = new ServerPortalWorker(workerUri, R4HProtocol.MAX_SEND_PACKETS + R4HProtocol.JX_SERVER_SPARE_MSGS, dnBridge.getWritePacketSize() + R4HProtocol.JX_BUF_SPARE,
+			        R4HProtocol.ACK_SIZE);
+			spw.start();
+		} else {
+			spw = spPool.remove(0);
 		}
+
+		LOG.trace("Going to put ss on hashtable: ss=" + dxc.getSessionServer());
+		sessionToWorkerHashtable.put(dxc.getSessionServer(), spw);
+		dxc.setEqh(spw.eqh);
+		dxc.setServerPortalWorker(spw);
+		sp.forward(spw.sp, dxc.getSessionServer());
+		if (LOG.isDebugEnabled()) {
+			LOG.debug("After session forward: " + spw.sp);
+		}
+	}
+
+	synchronized void onSessionClosed(ServerSession ss) {
+		if (sessionToWorkerHashtable.containsKey(ss)) {
+			ServerPortalWorker spw = sessionToWorkerHashtable.get(ss);
+			sessionToWorkerHashtable.remove(ss);
+			spPool.add(spw);
+		}
+
 	}
 
 }

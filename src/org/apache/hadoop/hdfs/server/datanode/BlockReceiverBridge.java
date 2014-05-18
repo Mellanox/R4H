@@ -15,6 +15,7 @@ import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.nio.ByteBuffer;
+import java.util.LinkedList;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ExecutorService;
 
@@ -30,8 +31,12 @@ import org.apache.hadoop.hdfs.server.protocol.DatanodeRegistration;
 import org.apache.hadoop.util.DataChecksum;
 import org.apache.hadoop.util.StringUtils;
 
+import sun.awt.ScrollPaneWheelScroller;
+
+import com.mellanox.jxio.ServerPortal;
 import com.mellanox.r4h.AsyncFileOutputStream;
 import com.mellanox.r4h.R4HProtocol;
+import com.mellanox.r4h.ServerPortalWorker;
 import com.mellanox.r4h.WriteOprHeader;
 import com.mellanox.r4h.AsyncFileOutputStream.AsyncWriteCompletion;
 
@@ -61,53 +66,15 @@ public class BlockReceiverBridge extends BlockReceiver {
 	private AsyncFileOutputStream asyncOut;
 	private AsyncFileOutputStream asyncCout;
 	private Field currPacketBufField;
-	private static final ConcurrentLinkedQueue<ByteBuffer> packetBufferPool = new ConcurrentLinkedQueue<>();
-	private static final int copyBufferSize;
+	private ServerPortalWorker serverPortalWorker;
 
-	static {
-		int writePacketSize = new HdfsConfiguration().getInt(DFS_CLIENT_WRITE_PACKET_SIZE_KEY, DFS_CLIENT_WRITE_PACKET_SIZE_DEFAULT);
-		copyBufferSize = writePacketSize + R4HProtocol.JX_BUF_SPARE;
-		allocatePacketCopyBuffers(NUM_OF_PREALLOC_PACKET_COPY_BUFFERS);
-	}
-
-	public static void loadStatic() {
-		int x = 0;
-	} // for letting DXCS preload static block
-
-	private static void allocatePacketCopyBuffers(int amount) {
-		LOG.info(String.format("Allocating packet buffers for async disk write: %d * %d KB", amount, copyBufferSize / 1024));
-		for (int j = 0; j < amount; j++) {
-			packetBufferPool.add(ByteBuffer.allocate(copyBufferSize));
-			// TODO: allocate one big ByteBuffer and slice it.
-		}
-	}
-
-	private synchronized static ByteBuffer getCopyBuffer() {
-		ByteBuffer buff = packetBufferPool.poll();
-		if (buff == null) {
-			LOG.info("No enough packet buffers - allocating more...");
-			allocatePacketCopyBuffers(NUM_OF_PREALLOC_PACKET_COPY_BUFFERS);
-			buff = packetBufferPool.poll();
-		}
-		buff.clear();
-		return buff;
-	}
-
-	public static void returnCurrPacketCopyBuffer(ByteBuffer buff) {
-		if (buff != null) {
-			buff.clear();
-			packetBufferPool.add(buff);
-		} else {
-			LOG.warn("Tried to return a NULL packet buffer to pool");
-		}
-	}
-
-	public BlockReceiverBridge(WriteOprHeader oprHeader, DataInputStream inForHeaderOnly, String sessionInfo, DataNodeBridge dnEx,
+	public BlockReceiverBridge(ServerPortalWorker spw, WriteOprHeader oprHeader, DataInputStream inForHeaderOnly, String sessionInfo, DataNodeBridge dnEx,
 	        ExecutorService diskIOexecutorService) throws IOException, SecurityException, NoSuchFieldException, IllegalArgumentException,
 	        IllegalAccessException, NoSuchMethodException {
 		super(oprHeader.getBlock(), inForHeaderOnly, sessionInfo, sessionInfo, oprHeader.getStage(), oprHeader.getLatestGenerationStamp(), oprHeader
 		        .getMinBytesRcvd(), oprHeader.getMaxBytesRcvd(), oprHeader.getClientName(), oprHeader.getSrcDataNode(), dnEx.getDN(), oprHeader
 		        .getRequestedChecksum());
+		serverPortalWorker=spw;
 		singleThreadExecutor = diskIOexecutorService;
 		// TODO: check if it is really a newSingleThreadExecutor
 		ssInfo = sessionInfo;
@@ -137,8 +104,8 @@ public class BlockReceiverBridge extends BlockReceiver {
 		return (PacketReceiver) packetReceiverField.get(this);
 	}
 
-	private void updatePacketCopyBuffer() throws IllegalArgumentException, IllegalAccessException, NoSuchFieldException, SecurityException {
-		curCopyBuff = getCopyBuffer();
+	private void updatePacketCopyBuffer() throws IllegalArgumentException, IllegalAccessException, NoSuchFieldException, SecurityException, IOException {
+		curCopyBuff = serverPortalWorker.getAsyncIOBuffer();
 		PacketReceiver receiver = getPacketReceiver();
 		currPacketBufField.set(receiver, curCopyBuff);
 	}

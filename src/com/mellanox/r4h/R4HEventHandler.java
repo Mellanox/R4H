@@ -22,6 +22,7 @@ import java.io.PrintStream;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.hadoop.util.StringUtils;
 
 import com.mellanox.jxio.EventQueueHandler;
 
@@ -52,10 +53,7 @@ public class R4HEventHandler extends EventQueueHandler {
 				onBreakEqh();
 			}
 		} catch (Throwable t) {
-			ByteArrayOutputStream baos = new ByteArrayOutputStream();
-			PrintStream ps = new PrintStream(baos);
-			t.printStackTrace(ps);
-			LOG.fatal("A R4H event handler worker was crashed. " + new String(baos.toByteArray()));
+			LOG.fatal("A R4H event handler worker was crashed. " + StringUtils.stringifyException(t));
 		}
 	}
 	
