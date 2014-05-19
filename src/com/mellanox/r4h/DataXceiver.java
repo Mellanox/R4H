@@ -52,7 +52,6 @@ import com.mellanox.jxio.EventName;
 import com.mellanox.jxio.EventQueueHandler;
 import com.mellanox.jxio.EventReason;
 import com.mellanox.jxio.Msg;
-import com.mellanox.jxio.MsgPool;
 import com.mellanox.jxio.ServerSession;
 import com.mellanox.jxio.ServerSession.SessionKey;
 
@@ -78,7 +77,6 @@ import org.apache.hadoop.hdfs.security.token.block.BlockTokenSecretManager;
  */
 class DataXceiver extends Receiver {
 	private final static Log LOG = LogFactory.getLog(DataXceiver.class);
-	private static long currRequestTSNano = 0;
 	private ClientSession clientSession;
 	private boolean isFirstRequest = true;
 	private boolean isFirstReply = true;
@@ -91,14 +89,12 @@ class DataXceiver extends Receiver {
 	private ServerSession serverSession;
 	private Msg currMsg = null;
 	private ExecutorService packetAsyncIOExecutor;
-	private ExecutorService asyncRequestExecutor;
 	private String uri;
 	private ServerPortalWorker serverPortalWorker;
 
 	class SSCallbacks implements ServerSession.Callbacks {
 		@Override
 		public void onRequest(Msg msg) {
-			currRequestTSNano = System.nanoTime();
 			currMsg = msg;
 			if (LOG.isTraceEnabled()) {
 				LOG.trace("got request message");
@@ -243,7 +239,6 @@ class DataXceiver extends Receiver {
 		this.dnBridge = dxcs.dnBridge;
 		this.eqh = dxcs.eqh;
 		this.packetAsyncIOExecutor = Executors.newSingleThreadExecutor(); // TODO: get from pool ?
-		this.asyncRequestExecutor = Executors.newSingleThreadExecutor();
 		this.uri = sKey.getUri();
 		DataXceiver.SSCallbacks ssCbs = this.new SSCallbacks();
 		serverSession = new ServerSession(sKey, ssCbs);
@@ -570,10 +565,6 @@ class DataXceiver extends Receiver {
 		URI uri = R4HProtocol.createPipelineURI(oprHeader.getTargets(), clientURI.substring(index));
 		LOG.info("Open a proxy client session: " + uri);
 		clientSession = new ClientSession(eqh, uri, csCBs);
-	}
-
-	private boolean hasSessionClient() {
-		return (this.clientSession != null);
 	}
 
 	private void sendOprHeaderToPipeline(Msg msg, ExtendedBlock origBlk) throws IOException {
