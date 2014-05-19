@@ -547,7 +547,7 @@ class DataXceiver extends Receiver {
 		replies[0] = SUCCESS;
 		replies[1] = ERROR;
 		PipelineAck replyAck = new PipelineAck(expectedSeqno, replies);
-		replyPacketAck(origMsg, replyAck, false);
+		replyPacketAck(origMsg, replyAck, true);
 	}
 
 	private void sendPktToPipeline(PipelinePacketContext context) throws IOException {
