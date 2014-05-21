@@ -23,27 +23,42 @@ import java.nio.ByteBuffer;
 import java.util.LinkedList;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
+
 import com.mellanox.jxio.EventQueueHandler;
 import com.mellanox.jxio.Msg;
 import com.mellanox.jxio.MsgPool;
 import com.mellanox.jxio.ServerPortal;
 import com.mellanox.jxio.ServerSession;
+import com.mellanox.jxio.EventQueueHandler.Callbacks;
 
 public class ServerPortalWorker {
+	private static final Log LOG = LogFactory.getLog(ServerPortalWorker.class.getName());
 	private final Thread th;
-	private final MsgPool serverMsgPool;
 	final EventQueueHandler eqh;
 	final ServerPortal sp;
 	private final LinkedList<ByteBuffer> ioBufferPool = new LinkedList<>();
 	private final ConcurrentLinkedQueue<Runnable> asyncOprQueue = new ConcurrentLinkedQueue<>();
+	private final int msgOutSize;
+	private final int msgInSize;
+	private final int numOfMsgsToBind;
+	private final Callbacks onDynamicMsgPoolAllocation = new EventQueueHandler.Callbacks() {
 
-	Runnable onEqhBreak = new Runnable() {
+		@Override
+		public MsgPool getAdditionalMsgPool(int inSize, int outSize) {
+			LOG.warn("Potential resources leak - JXIO is missing msg resources, allocating additional buffers. SP=" + ServerPortalWorker.this.sp + "\n");
+			return allocateBuffers();
+		}
+	};
+
+	private final Runnable onEqhBreak = new Runnable() {
 		@Override
 		public void run() {
 			processReplies();
 		}
 	};
-	
+
 	private class AsyncReply implements Runnable {
 		final ServerSession session;
 		final Msg msg;
@@ -60,16 +75,26 @@ public class ServerPortalWorker {
 	}
 
 	ServerPortalWorker(URI uri, int numOfMsgsToBind, int msgInSize, int msgOutSize) {
-		this.serverMsgPool = new MsgPool(numOfMsgsToBind + R4HProtocol.JX_SERVER_SPARE_MSGS, msgInSize, msgOutSize);
-		this.eqh = new R4HEventHandler(null, onEqhBreak);
-		this.eqh.bindMsgPool(serverMsgPool);
+		this.msgInSize = msgInSize;
+		this.msgOutSize = msgOutSize;
+		this.numOfMsgsToBind = numOfMsgsToBind;
+		this.eqh = new R4HEventHandler(onDynamicMsgPoolAllocation, onEqhBreak);
+
+		MsgPool msgPool = allocateBuffers();
+		this.eqh.bindMsgPool(msgPool);
+
 		this.sp = new ServerPortal(eqh, uri);
 		this.th = new Thread(eqh);
+	}
 
+	MsgPool allocateBuffers() {
+		LOG.info(String.format("%s : Allocating %d messages (in=%dB, out=%sB) and addiotnal %dX%dB buffers for async IO", this.sp,numOfMsgsToBind, msgInSize, msgOutSize, numOfMsgsToBind, msgInSize));
+		MsgPool msgPool = new MsgPool(numOfMsgsToBind, msgInSize, msgOutSize);
 		for (int j = 0; j < numOfMsgsToBind; j++) {
 			ioBufferPool.add(ByteBuffer.allocate(msgInSize));
 			// TODO: allocate one big ByteBuffer and slice it.
 		}
+		return msgPool;
 	}
 
 	void start() {
@@ -78,7 +103,7 @@ public class ServerPortalWorker {
 
 	@Override
 	public String toString() {
-		return String.format("ServerPortalWorker{thread='%s', sp='%s', serverMsgPool='%s', ioBufferPool='%s'}", th, sp, serverMsgPool, ioBufferPool);
+		return String.format("ServerPortalWorker{thread='%s', sp='%s', ioBufferPool='%s'}", th, sp, ioBufferPool);
 	}
 
 	public synchronized ByteBuffer getAsyncIOBuffer() throws IOException {
@@ -96,14 +121,14 @@ public class ServerPortalWorker {
 			ioBufferPool.add(buff);
 		}
 	}
-	
+
 	public void queueAsyncReply(ServerSession ss, Msg msg) {
 		asyncOprQueue.add(new AsyncReply(ss, msg));
 		// if (msgReplyQueue.size() >= REPLY_QUEUE_TRESHOLD_FOR_BREAK_EVENT_LOOP) {
 		eqh.breakEventLoop();
 		// }
 	}
-	
+
 	void processReplies() {
 		Runnable opr = asyncOprQueue.poll();
 		while (opr != null) {
@@ -116,7 +141,5 @@ public class ServerPortalWorker {
 		asyncOprQueue.add(task);
 		eqh.breakEventLoop();
 	}
-
-
 
 }

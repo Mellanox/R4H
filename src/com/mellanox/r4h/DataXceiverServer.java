@@ -19,31 +19,24 @@ package com.mellanox.r4h;
 
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Hashtable;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.concurrent.ConcurrentLinkedQueue;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hdfs.server.datanode.BlockReceiverBridge;
 import org.apache.hadoop.hdfs.server.datanode.DataNode;
 import org.apache.hadoop.hdfs.server.datanode.DataNodeBridge;
 
-import com.mellanox.jxio.ClientSession;
 import com.mellanox.jxio.EventName;
 import com.mellanox.jxio.EventQueueHandler;
-import com.mellanox.jxio.EventQueueHandler.Callbacks;
 import com.mellanox.jxio.EventReason;
-import com.mellanox.jxio.Msg;
 import com.mellanox.jxio.MsgPool;
 import com.mellanox.jxio.ServerPortal;
 import com.mellanox.jxio.ServerSession;
 import com.mellanox.jxio.ServerSession.SessionKey;
-import com.mellanox.r4h.DataXceiver.CSCallbacks;
 
 /**
  * R4H's parallel class to the original org.apache.hadoop.hdfs.server.datanode.DataXceiverServer
@@ -54,22 +47,18 @@ import com.mellanox.r4h.DataXceiver.CSCallbacks;
  */
 class DataXceiverServer implements Runnable {
 	static final Log LOG = LogFactory.getLog(DataXceiverServer.class.getName());
-	private static final int DEFAULT_NUM_OF_PREALLOC_MSGPOOLS = R4HProtocol.MSG_POOLS_GROWTH_FACTOR;
 	private final ThreadGroup threadGroup;
 	private final URI uri;
 	private final List<DataXceiver> dxcList;
 	final ServerPortal sp;
 	final DataNodeBridge dnBridge;
 	final EventQueueHandler eqh;
-
-
-	private static final int NUM_OF_PRE_ALLOC_SERVER_PORTAL_WORKERS_DEFAULT = 16;
+	private static final int NUM_OF_PRE_ALLOC_SERVER_PORTAL_WORKERS_DEFAULT = 30;
 	private static final String NUM_OF_PRE_ALLOC_SERVER_PORTAL_WROKERS_PARAM_NAME = "r4h.server.portal.workers";
 	private int numOfServerPortalWorkers;
 	private final URI workerUri;
 	final List<ServerPortalWorker> spPool;
 	final Hashtable<ServerSession, ServerPortalWorker> sessionToWorkerHashtable;
-	private final Hashtable<ServerSession, MsgPool> ssMsgPoolHash = new Hashtable<ServerSession, MsgPool>();
 
 	private class DXSCallbacks implements ServerPortal.Callbacks {
 
@@ -108,24 +97,11 @@ class DataXceiverServer implements Runnable {
 		this.uri = new URI(String.format("rdma://%s", dn.getDisplayName()));
 		this.threadGroup = new ThreadGroup("R4H Datanode Threads");
 		LOG.info("Creating DataXceiverServer - uri=" + uri);
-
-		Callbacks onDynamicMsgPoolAllocation = new EventQueueHandler.Callbacks() {
-
-			@Override
-			public MsgPool getAdditionalMsgPool(int inSize, int outSize) {
-				return allocateServerMsgPool();
-			}
-		};
-
-		this.eqh = new R4HEventHandler(onDynamicMsgPoolAllocation, null);
+		this.eqh = new R4HEventHandler(null, null);
 		LOG.debug("Aftet EventQueueHandler creation");
 		DataXceiverServer.DXSCallbacks dxsCbs = this.new DXSCallbacks();
 		this.sp = new ServerPortal(eqh, uri, dxsCbs);
 		LOG.debug("Aftet ServerPortal creation");
-		MsgPool msgPool = allocateServerMsgPool();
-		LOG.debug("Aftet MsgPool creation");
-		this.eqh.bindMsgPool(msgPool);
-		LOG.debug("Aftet bindMsgPool");
 
 		LOG.trace("writePacketSize=" + dnBridge.getWritePacketSize());
 
@@ -147,10 +123,6 @@ class DataXceiverServer implements Runnable {
 		LOG.trace(this.toString());
 	}
 
-	private MsgPool allocateServerMsgPool() {
-		return new MsgPool(DEFAULT_NUM_OF_PREALLOC_MSGPOOLS * R4HProtocol.SERVER_MSG_POOL_SIZE, dnBridge.getWritePacketSize()
-		        + R4HProtocol.JX_BUF_SPARE, R4HProtocol.ACK_SIZE);
-	}
 
 	@Override
 	public void run() {
@@ -189,7 +161,6 @@ class DataXceiverServer implements Runnable {
 			spw = spPool.remove(0);
 		}
 
-		LOG.trace("Going to put ss on hashtable: ss=" + dxc.getSessionServer());
 		sessionToWorkerHashtable.put(dxc.getSessionServer(), spw);
 		dxc.setEqh(spw.eqh);
 		dxc.setServerPortalWorker(spw);

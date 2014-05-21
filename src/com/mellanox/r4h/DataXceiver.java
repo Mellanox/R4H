@@ -202,8 +202,6 @@ class DataXceiver extends Receiver {
 					LOG.error("Failed to reply NACK after msg error. " + e);
 				}
 			} else {
-				// TEMPORARY!
-				// TODO: reply NACK properly instead of just close the session
 				serverSession.close();
 			}
 		}
