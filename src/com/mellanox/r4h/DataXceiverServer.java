@@ -33,7 +33,6 @@ import org.apache.hadoop.hdfs.server.datanode.DataNodeBridge;
 import com.mellanox.jxio.EventName;
 import com.mellanox.jxio.EventQueueHandler;
 import com.mellanox.jxio.EventReason;
-import com.mellanox.jxio.MsgPool;
 import com.mellanox.jxio.ServerPortal;
 import com.mellanox.jxio.ServerSession;
 import com.mellanox.jxio.ServerSession.SessionKey;

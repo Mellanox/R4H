@@ -91,6 +91,7 @@ class DataXceiver extends Receiver {
 	private ExecutorService packetAsyncIOExecutor;
 	private String uri;
 	private ServerPortalWorker serverPortalWorker;
+	public boolean clientSessionCloseEventExpected = true;
 
 	class SSCallbacks implements ServerSession.Callbacks {
 		@Override
@@ -115,7 +116,6 @@ class DataXceiver extends Receiver {
 				LOG.error("DataXceiver exception during processing request.", t);
 				if (DataXceiver.this.serverSession != null) {
 					DataXceiver.this.serverSession.close();
-					DataXceiver.this.serverSession = null;
 				}
 			}
 		}
@@ -175,14 +175,14 @@ class DataXceiver extends Receiver {
 								processPacketReply(fmsg);
 							} catch (Throwable t) {
 								LOG.error("Failed to process async packet reply. ", t);
-								AsyncCloseServerSession();
+								asyncCloseServerSession();
 							}
 						}
 					});
 				}
 			} catch (Throwable t) {
 				LOG.error("Failed to process reply. ", t);
-				AsyncCloseServerSession();
+				asyncCloseServerSession();
 			}
 		}
 
@@ -195,15 +195,10 @@ class DataXceiver extends Receiver {
 		public void onMsgError(Msg msg, EventReason reason) {
 			LOG.error(String.format("Mirror client got msg error:  reason=%s ss=%s sc=%s", reason, serverSession, clientSession));
 
-			if (isFirstReply) {
-				try {
-					replyHeaderAck(firstMsg, SUCCESS, oprHeader.getTargetByIndex(0).getInfoAddr());
-				} catch (IOException e) {
-					LOG.error("Failed to reply NACK after msg error. " + e);
-				}
-			} else {
+			if (serverSession != null) {
 				serverSession.close();
 			}
+
 		}
 
 		@Override
@@ -211,8 +206,9 @@ class DataXceiver extends Receiver {
 			String logmsg = String.format("Client Session event: event=%s reason=%s ss=%s", session_event, reason, serverSession);
 			switch (session_event) {
 				case SESSION_CLOSED:
-					if (DataXceiver.this.clientSession == null) {
+					if (DataXceiver.this.clientSessionCloseEventExpected)  {
 						LOG.info(logmsg);
+						clientSessionCloseEventExpected=false;
 					} else {
 						LOG.error(logmsg);
 					}
@@ -222,7 +218,6 @@ class DataXceiver extends Receiver {
 					LOG.error(logmsg);
 					LOG.error("Closing server session due to error event: ss=" + serverSession);
 					serverSession.close();
-					serverSession = null;
 					break;
 				default:
 					break;
@@ -460,8 +455,8 @@ class DataXceiver extends Receiver {
 		}
 
 		if (DataXceiver.this.clientSession != null) {
+			clientSessionCloseEventExpected=true;	
 			DataXceiver.this.clientSession.close();
-			DataXceiver.this.clientSession = null;
 		}
 	}
 
@@ -501,14 +496,14 @@ class DataXceiver extends Receiver {
 			// file and finalize the block before responding success
 			if (pipelinePktContext.isLastPacketInBlock()) {
 				blockReceiver.finalizeBlock();
-				AsyncCloseClientSession();
+				asyncCloseClientSession();
 			}
 			replyPipelineAck(origMsg, expected, ack, SUCCESS, true);
 		} catch (Throwable e) {
 			LOG.error("Failed during processing packet reply: " + blockReceiver.getBlock() + " " + oprHeader.getNumTargets() + " Exception "
 			        + StringUtils.stringifyException(e));
 			if (clientSession != null) {
-				AsyncCloseClientSession();
+				asyncCloseClientSession();
 			}
 		} finally {
 			if (serverSession != null) {
@@ -628,13 +623,12 @@ class DataXceiver extends Receiver {
 
 	void close() {
 		if (DataXceiver.this.clientSession != null) {
+			clientSessionCloseEventExpected=true;	
 			DataXceiver.this.clientSession.close();
-			DataXceiver.this.clientSession = null;
 		}
 
 		if (DataXceiver.this.serverSession != null) {
 			DataXceiver.this.serverSession.close();
-			DataXceiver.this.serverSession = null;
 		}
 		// TODO: remove it from DXCServer's dxcList!
 	}
@@ -739,31 +733,31 @@ class DataXceiver extends Receiver {
 	void setServerPortalWorker(ServerPortalWorker spw) {
 		this.serverPortalWorker = spw;
 	}
-	
-	private void AsyncCloseServerSession() {
+
+	private void asyncCloseServerSession() {
 		serverPortalWorker.queueAsyncRunnable(new Runnable() {
 
 			@Override
 			public void run() {
 				if (DataXceiver.this.serverSession != null) {
 					DataXceiver.this.serverSession.close();
-					DataXceiver.this.serverSession = null;
-				}
-			}
-		});
-	}
-	private void AsyncCloseClientSession() {
-		serverPortalWorker.queueAsyncRunnable(new Runnable() {
-
-			@Override
-			public void run() {
-				if (DataXceiver.this.clientSession != null) {
-					DataXceiver.this.clientSession.close();
-					DataXceiver.this.clientSession = null;
 				}
 			}
 		});
 	}
 
+	private void asyncCloseClientSession() {
+		final ClientSession cs = DataXceiver.this.clientSession;
+		if (cs != null) {
+			serverPortalWorker.queueAsyncRunnable(new Runnable() {
+
+				@Override
+				public void run() {
+					clientSessionCloseEventExpected=true;	
+					cs.close();
+				}
+			});
+		}
+	}
 
 }
