@@ -40,7 +40,7 @@ fi
 # Prepare Mail Phase
 message="<font size=6 color=blue><b>Daily R4H Regression Report</b></font><br><br><b>Date:</b> ${DATE}<br><b>Hadoop Version:</b> ${HADOOP_VERSION}<br>" 
 R4H_VERSION=`unzip -q -c "$R4H_JAR_PATH" META-INF/MANIFEST.MF | grep "Implementation-Version" | awk '{ print $2 }'`
-JXIO_VERSION=`unzip -q -c "$JXIO_JAR_PATH" META-INF/MANIFEST.MF | grep "Specification-Version" | awk '{ print $2 }'`
+JXIO_VERSION=`unzip -q -c "$JXIO_JAR_PATH" META-INF/MANIFEST.MF | egrep "Implementation-Version|Specification-Version" | awk '{ print $2 }'`
 
 if [[ -n "$R4H_VERSION" ]]; then
     message="$message <b>R4H Version:</b> ${R4H_VERSION}<br>"
