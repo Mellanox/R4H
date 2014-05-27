@@ -5,10 +5,11 @@ mapTasksSet=$2
 
 exportResultsToReport()
 {
-    echo "Running TeraGen using ${PROGRAM} job size ${jobSize} mappers ${mapTasks} <br>" >> $REPORT_PATH_TERAGEN
-    echo "Times: $TIMES <br>" >> $REPORT_PATH_TERAGEN
-    echo "Failed: $FAILED_ATTEMPTS" >> $REPORT_PATH_TERAGEN
-    echo "<br><br>" >> $REPORT_PATH_TERAGEN
+    TIMES=$(echo "$TIMES" | xargs | tr ' ' '\n')
+    TIME_MIN=$(echo "$TIMES" | sort -n | head -n 1)
+    TIME_MAX=$(echo "$TIMES" | sort -n | tail -n 1)
+    TIME_AVG=$(echo "$TIMES" | awk 'BEGIN{ n=0; sum=0; } { sum+=$1; n++ } END{ print sum/n }')
+    echo "${PROGRAM},${mapTasks},${jobSize},${TIME_MIN},${TIME_MAX},${TIME_AVG},${FAILED_ATTEMPTS}" >> ${TERAGEN_SHEET_CSV_PATH}
 }
 
 runJob()
@@ -37,6 +38,8 @@ runJob()
     fi
     pdsh -w $SLAVES sync
 }
+
+echo "program,tasks,fileSize,min time,max time,avg time,failed attempts" >> ${TERAGEN_SHEET_CSV_PATH}
 
 for jobSize in $jobSizeSet
 do

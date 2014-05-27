@@ -2,8 +2,8 @@
 # Default configuration
 
 export DATE=`date +%Y-%m-%d_%H%M`
-export CM_HOST="r-sw-fatty01"
-export SLAVES="r-sw-fatty01,r-sw-fatty02,r-sw-fatty03,r-sw-fatty04,r-sw-fatty05,r-sw-fatty06,r-sw-fatty07"
+export CM_HOST="r-aa-fatty01"
+export SLAVES="r-aa-fatty02,r-aa-fatty03,r-aa-fatty04,r-aa-fatty05,r-aa-fatty06,r-aa-fatty07"
 export JXIO_JAR_PATH="/tmp/jxio.jar"
 export R4H_JAR_PATH="/tmp/r4h.jar"
 export HADOOP_VERSION=`hadoop version | head -n 1`
@@ -14,10 +14,6 @@ export DATATOOLS_JAR="${JARS_DIR}/datatools.jar"
 export USE_UFA="-Dfs.hdfs.impl=com.mellanox.r4h.DistributedFileSystem"
 export LOG_PATH="/.autodirect/acclgwork/ufa/daily_results/R4H_Daily_${DATE}/"
 export LONG_LOG="${LOG_PATH}long_${DATE}.log"
-export REPORT_PATH_DFSIO="${LOG_PATH}testdfsio_report_${DATE}.html"
-export REPORT_PATH_DFSIOE="${LOG_PATH}dfsioe_report_${DATE}.html"
-export REPORT_PATH_TERAGEN="${LOG_PATH}teragen_report_${DATE}.html"
-export REPORT_PATH_TERASORT="${LOG_PATH}terasort_report_${DATE}.html"
 export REPORT_PATH_ERROR="${LOG_PATH}error_summary_${DATE}.txt"
 export DFS_SHEET_CSV_PATH="${LOG_PATH}testdfsio_results_${DATE}.csv"
 export DFS_SHEET_XLSX_PATH="${LOG_PATH}testdfsio_results_${DATE}.xlsx"
@@ -33,6 +29,7 @@ export MAILING_LIST="eladi@mellanox.com,alexr@mellanox.com,yuriya@mellanox.com,i
 export MAIL_SUBJECT="Daily R4H Regression Report - `date`"
 export TERAGEN_PATH="/teragen"
 export TERASORT_PATH="/terasort"
+export DSTAT_TMP_PATH="/.autodirect/acclgwork/ufa/tmp"
 export DFS_REPLICATION="1"
 export SLEEP_TIME="36000"
 export USAGE_MESSAGE="Usage: bash $0 [OPTIONS]

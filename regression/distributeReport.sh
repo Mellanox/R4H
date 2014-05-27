@@ -13,20 +13,15 @@ TAR_PATH="${LOG_DIR}/${jobName}.tgz"
 
 # Parsing Results Phase
 if [[ -n "$RAN_DFSIO" ]]; then
-    # Parse Report To CSV
-    python parseDFSIOReport.py ${REPORT_PATH_DFSIO} ${DFS_SHEET_CSV_PATH}
-
     # Process CSV to Excel with Graphs (xlsx)
     python processCSV2GraphXlsx_DFSIO.py -i ${DFS_SHEET_CSV_PATH} -o ${DFS_SHEET_XLSX_PATH}
 fi
 
 if [[ -n "$RAN_TERAGEN" ]]; then
-    python parseTeraReport.py ${REPORT_PATH_TERAGEN} ${TERAGEN_SHEET_CSV_PATH}
     python processCSV2GraphXlsx_Tera.py -i ${TERAGEN_SHEET_CSV_PATH} -o ${TERAGEN_SHEET_XLSX_PATH}
 fi
 
 if [[ -n "$RAN_TERASORT" ]]; then
-    python parseTeraReport.py ${REPORT_PATH_TERASORT} ${TERASORT_SHEET_CSV_PATH}
     python processCSV2GraphXlsx_Tera.py -i ${TERASORT_SHEET_CSV_PATH} -o ${TERASORT_SHEET_XLSX_PATH}
 fi
 
@@ -45,7 +40,7 @@ fi
 # Prepare Mail Phase
 message="<font size=6 color=blue><b>Daily R4H Regression Report</b></font><br><br><b>Date:</b> ${DATE}<br><b>Hadoop Version:</b> ${HADOOP_VERSION}<br>" 
 R4H_VERSION=`unzip -q -c "$R4H_JAR_PATH" META-INF/MANIFEST.MF | grep "Implementation-Version" | awk '{ print $2 }'`
-JXIO_VERSION=`unzip -q -c "$JXIO_JAR_PATH" META-INF/MANIFEST.MF | grep "Specification-Version" | awk '{ print $2 }'`
+JXIO_VERSION=`unzip -q -c "$JXIO_JAR_PATH" META-INF/MANIFEST.MF | egrep "Implementation-Version|Specification-Version" | awk '{ print $2 }'`
 
 if [[ -n "$R4H_VERSION" ]]; then
     message="$message <b>R4H Version:</b> ${R4H_VERSION}<br>"
@@ -76,6 +71,8 @@ subject="${MAIL_SUBJECT}"
 # Send Mail Phase
 echo "Sending mail..."
 python mailSenderUFA.py "$subject" "$message" "`date`" "$USER" "$MAILING_LIST" "${TAR_PATH}" "${DFS_SHEET_XLSX_PATH}" "${TERAGEN_SHEET_XLSX_PATH}" "${TERASORT_SHEET_XLSX_PATH}" "${DFSIOE_SHEET_XLSX_PATH}" "${REPORT_PATH_ERROR}"
+
+sleep 5
 
 # Finalize
 if [[ "$tarstatus" != "0" ]]; then

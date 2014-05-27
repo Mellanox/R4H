@@ -23,16 +23,9 @@ exportResultsToReport()
         TP_AVG=`echo $TP | awk '{ size=split($0,a," "); sum=0; for(i=1;i<=NF;i++)sum=sum+a[i]; print sum/size }'`
         TIME_MIN=`echo "$TIME" | sort -n | head -n 1`
         TIME_MAX=`echo "$TIME" | sort -n | tail -n 1`
-        TIME_AVG=`echo $TIME | awk '{ size=split($0,a," "); sum=0; for(i=1;i<=NF;i++)sum=sum+a[i]; print sum/size }'`
-        
+        TIME_AVG=`echo $TIME | awk '{ size=split($0,a," "); sum=0; for(i=1;i<=NF;i++)sum=sum+a[i]; print sum/size }'`       
         echo "${PROGRAM},${nrFiles},${fileSize},${TIME_MIN},${TIME_MAX},${TIME_AVG},${TP_MIN},${TP_MAX},${TP_AVG},${AGGTP_MIN},${AGGTP_MAX},${AGGTP_AVG},${FAILED_ATTEMPTS}" >> $DFSIOE_SHEET_CSV_PATH
-        
-        #echo "Running ${PROGRAM} with ${nrFiles} files of size ${fileSize}MB results: <br>" >> $REPORT_PATH_DFSIOE
-        #echo "Times: $TIME <br>" >> $REPORT_PATH_DFSIOE
-        #echo "Throughputs: $TP <br>" >> $REPORT_PATH_DFSIOE
-        #echo "Aggregated Throughputs: $AGGTP <br>" >> $REPORT_PATH_DFSIOE
-        #echo "Failed: $FAILED_ATTEMPTS" >> $REPORT_PATH_DFSIOE
-        #echo "<br><br>" >> $REPORT_PATH_DFSIOE
+
 }
 
 runJob()

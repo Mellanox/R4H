@@ -15,7 +15,7 @@ BEGIN {
 
 function print_record() {
 	# NOTE: we use avearge for CPU statistics, and total for the rest 
-	if (n) print "usr=" usr/n, "sys=" sys/n, "idl=" idl/n, "wai=" wai/n, "hiq=" hiq/n, "siq=" siq/n #, read, writ, recv, send, used, buff, cach, free
+	if (n) print usr/n, sys/n, idl/n, wai/n, hiq/n, siq/n #, read, writ, recv, send, used, buff, cach, free
 	#n = usr = sys = idl = wai = hiq = siq = read = writ = recv = send = used = buff = cach = free = 0
 }
 
