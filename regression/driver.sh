@@ -117,6 +117,26 @@ while getopts "$optspec" optchar; do
                 no_restart)
                     export NO_RESTART=1
                     ;;
+		iter_vnl=*)
+		    val=${OPTARG#*=}
+                    opt=${OPTARG%=$val}
+		    export ITERATIONS_VNL="${val}"
+		    ;;
+		iter_r4h=*)
+		    val=${OPTARG#*=}
+                    opt=${OPTARG%=$val}
+		    export ITERATIONS_R4H="${val}"
+		    ;;
+		comment_subject=*)
+		    val=${OPTARG#*=}
+                    opt=${OPTARG%=$val}
+		    export COMMENT_SUBJECT="${val}"
+		    ;;
+		comment_body=*)
+		    val=${OPTARG#*=}
+                    opt=${OPTARG%=$val}
+		    export COMMENT_BODY="${val}"
+		    ;;
                 *)
                     if [ "$OPTERR" = 1 ] && [ "${optspec:0:1}" != ":" ]; then
                         echo "Unknown option --${OPTARG}" >&2

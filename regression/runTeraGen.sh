@@ -49,11 +49,10 @@ do
         TIMES=""
         PROGRAM="UFA"
         FAILED_ATTEMPTS=0
-        ITERATIONS=3
-        RANGE=`echo "$ITERATIONS" | awk '{ for(i=1;i<=$1;i++) print i;}' | tr '\n' ' '`
+        RANGE=`echo "$ITERATIONS_R4H" | awk '{ for(i=1;i<=$1;i++) print i;}' | tr '\n' ' '`
         for i in $RANGE
         do
-            echo "@@@@@@@@@@@@@@@@@@@ `date` : (TERAGEN) running ${PROGRAM}, job size = ${jobSize}, Run number ${i} out of $ITERATIONS @@@@@@@@@@@@@@@@@@@@@@@@" >> $LONG_LOG
+            echo "@@@@@@@@@@@@@@@@@@@ `date` : (TERAGEN) running ${PROGRAM}, job size = ${jobSize}, Run number ${i} out of $ITERATIONS_R4H @@@@@@@@@@@@@@@@@@@@@@@@" >> $LONG_LOG
             runJob $mapTasks $USE_UFA
         done
         exportResultsToReport
@@ -62,11 +61,10 @@ do
         TIMES=""
         PROGRAM="VANILLA"
         FAILED_ATTEMPTS=0
-        ITERATIONS=1
-        RANGE=`echo "$ITERATIONS" | awk '{ for(i=1;i<=$1;i++) print i;}' | tr '\n' ' '`
+        RANGE=`echo "$ITERATIONS_VNL" | awk '{ for(i=1;i<=$1;i++) print i;}' | tr '\n' ' '`
         for j in $RANGE
         do
-            echo "@@@@@@@@@@@@@@@@@@@ `date` : (TERAGEN) running ${PROGRAM}, job size = ${jobSize}, Run number ${j} out of $ITERATIONS @@@@@@@@@@@@@@@@@@@@@@@@" >> $LONG_LOG
+            echo "@@@@@@@@@@@@@@@@@@@ `date` : (TERAGEN) running ${PROGRAM}, job size = ${jobSize}, Run number ${j} out of $ITERATIONS_VNL @@@@@@@@@@@@@@@@@@@@@@@@" >> $LONG_LOG
             runJob $mapTasks
         done
         exportResultsToReport

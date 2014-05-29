@@ -50,6 +50,11 @@ if [[ -n "$JXIO_VERSION" ]]; then
     message="$message <b>JXIO Version:</b> ${JXIO_VERSION}<br>"
 fi
 
+if [[ -n "$COMMENT_BODY" ]]; then
+    message="$message <b>User Comment:</b> ${COMMENT_BODY}<br>"
+fi
+
+
 message="$message <b>Tests:</b><br>"
 message="$message <ul>"
 if [[ -n "$RAN_DFSIO" ]]; then
@@ -67,6 +72,10 @@ fi
 message="$message </ul>"
 message="$message <br><br>Attaching reports and logs tarball.<br>"
 subject="${MAIL_SUBJECT}"
+
+if [[ -n "$COMMENT_SUBJECT" ]]; then
+    subject="${subject} - ${COMMENT_SUBJECT}"
+fi
 
 # Send Mail Phase
 echo "Sending mail..."

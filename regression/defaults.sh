@@ -32,6 +32,8 @@ export TERASORT_PATH="/terasort"
 export DSTAT_TMP_PATH="/.autodirect/acclgwork/ufa/tmp"
 export DFS_REPLICATION="1"
 export SLEEP_TIME="36000"
+export ITERATIONS_VNL="1"
+export ITERATIONS_R4H="3"
 export USAGE_MESSAGE="Usage: bash $0 [OPTIONS]
 Options:
 [--dfs_files_num=<value>] [--dfs_files_size=<value>] - Both required to run TestDFSIO.
@@ -42,4 +44,8 @@ Options:
 [--mailing_list=<value>]  - Determine alternative mailing list.
 [--dfs_replication=<value>] - Determine DFS replication factor. Default is 1.
 [--no_restart] - Don't restart HDFS & MapReduce services on launch.
+[--iter_r4h=<value>] - Number of iterations for R4H jobs. Default is 3.
+[--iter_vnl=<value>] - Number of iterations for Vanilla jobs. Default is 1.
+[--comment_subject=<value>] - Comment to be added to report mail subject field.
+[--comment_body=<value>] - Comment to be added to report mail body field.
 [--help] - Show usage."
