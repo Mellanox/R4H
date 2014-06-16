@@ -10,28 +10,19 @@
     <property name="debuglevel" value="source,lines,vars"/>
     <property name="target" value="1.7"/>
     <property name="source" value="1.7"/>
-    <property name="hadoopdir" value="/.autodirect/acclgwork/ufa/HDFS/hadoop-2.0.0-cdh4.4.0-SNAPSHOT/share/hadoop" />
-    <path id="R4H.classpath">
-
-        <pathelement location="build"/>
-	<fileset dir="${hadoopdir}/hdfs/">
-		<include name="*.jar" />
-	</fileset>
-	<fileset dir="${hadoopdir}/common/">
-		<include name="*.jar" />
-	</fileset>
-	<fileset dir="${hadoopdir}/hdfs/lib">
-		<include name="*.jar" />
-	</fileset>
-	<pathelement location="jxio/bin/jxio.jar"/>
-	<fileset dir="${hadoopdir}/common/lib">
-		<include name="*.jar" />
-	</fileset>
-    </path>
+    <target name="cdh44">
+	<property name="hadoopdir" value="/.autodirect/acclgwork/ufa/HDFS/hadoop-2.0.0-cdh4.4.0-SNAPSHOT/share/hadoop" />
+	<property name="matching-src" value="r4h-cdh4.4" />
+    </target>
+    <target  name="cdh5">
+	<property name="hadoopdir" value="/.autodirect/acclgwork/ufa/HDFS/hadoop-2.0.0-cdh5/share/hadoop" />
+	<property name="matching-src" value="r4h-cdh5" />
+	<antcall target="build" />
+    </target>
     <target name="init">
         <mkdir dir="build"/>
         <copy includeemptydirs="false" todir="build">
-			<fileset dir="src">
+		<fileset dir="${matching-src}/src">
 				<exclude name="**/*.java"/>
             </fileset>
         </copy>
@@ -44,10 +35,30 @@
     <target name="clean">
         <delete dir="build"/>
     </target>
-    <target depends="clean" name="cleanall"/>
-    <target depends="build-subprojects,build-project" name="build"/>
+    <target depends="cdh44,clean" name="cleanall"/>
+    <target name="path-init" unless="id">
+	<path id="R4H.classpath">
+		<pathelement location="build"/>
+		<fileset dir="${hadoopdir}/hdfs/">
+			<include name="*.jar" />
+		</fileset>
+		<fileset dir="${hadoopdir}/common/">
+			<include name="*.jar" />
+		</fileset>
+		<fileset dir="${hadoopdir}/hdfs/lib">
+			<include name="*.jar" />
+		</fileset>
+		<pathelement location="jxio/bin/jxio.jar"/>
+		<fileset dir="${hadoopdir}/common/lib">
+			<include name="*.jar" />
+		</fileset>
+	</path>
+    </target>
+
+    <target depends="cdh44,path-init,build-subprojects,build-project" name="build">
+    </target>
     <target name="build-subprojects"/>
-    <target depends="init" name="build-project">
+    <target depends="cdh44,init" name="build-project">
 	<exec outputproperty="gitver" executable="git">
 		     <arg value="describe"/>
 		     <arg value="--long"/>
@@ -55,13 +66,15 @@
 		     <arg value="--always"/>
 		     <arg value="--dirty"/>
 	</exec>
-	    
-        <echo message="${ant.project.name}: ${ant.file}"/>
-        <javac debug="true" debuglevel="${debuglevel}" destdir="build" includeantruntime="false" source="${source}" target="${target}">
-            <src path="src"/>
+	<echo message="${ant.project.name}: ${ant.file}"/>
+	<echo message="!!!!!!!!hadoopdir=${hadoopdir}"/>
+	<javac debug="true" debuglevel="${debuglevel}" destdir="build" includeantruntime="false" source="${source}" target="${target}">
+	
+		<src path="${matching-src}/src"/>
             <src path="test"/>
             <classpath refid="R4H.classpath"/>
-        </javac>
+    </javac>
+
 	    <jar destfile="build/r4h.jar" basedir="build/" includes="**/*.class">
 	       <manifest>
 		       <section	name="RDMA For HDFS">
@@ -71,19 +84,5 @@
 		       </section>
 		</manifest>
 	    </jar>
-    </target>
-    <target description="Build all projects which reference this project. Useful to propagate changes." name="build-refprojects"/>
-    <target description="copy Eclipse compiler jars to ant lib directory" name="init-eclipse-compiler">
-        <copy todir="${ant.library.dir}">
-            <fileset dir="${ECLIPSE_HOME}/plugins" includes="org.eclipse.jdt.core_*.jar"/>
-        </copy>
-        <unzip dest="${ant.library.dir}">
-            <patternset includes="jdtCompilerAdapter.jar"/>
-            <fileset dir="${ECLIPSE_HOME}/plugins" includes="org.eclipse.jdt.core_*.jar"/>
-        </unzip>
-    </target>
-    <target description="compile project with Eclipse compiler" name="build-eclipse-compiler">
-        <property name="build.compiler" value="org.eclipse.jdt.core.JDTCompilerAdapter"/>
-        <antcall target="build"/>
     </target>
 </project>
