@@ -485,7 +485,7 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable {
 						}
 
 						if (DFSOutputStream.LOG.isDebugEnabled()) {
-							DFSOutputStream.LOG.debug("DFSClient for block " + DFSOutputStream.this.streamer.block + " " + ack);
+							DFSOutputStream.LOG.debug(DFSOutputStream.this.toString() + " - DFSClient for block " + DFSOutputStream.this.streamer.block + " " + ack);
 						}
 						// processes response status from all datanodes.
 						for (int i = ack.getNumOfReplies() - 1; i >= 0 && dfsClient.clientRunning; i--) {
@@ -966,7 +966,7 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable {
 					// }
 
 					if (LOG.isDebugEnabled()) {
-						LOG.debug("DataStreamer block " + block + " sending packet " + one);
+						LOG.debug(DFSOutputStream.this.toString() + " - DataStreamer block " + block + " sending packet " + one);
 					}
 
 					// write out data to remote datanode

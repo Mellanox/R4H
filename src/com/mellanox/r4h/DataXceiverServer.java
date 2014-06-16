@@ -113,7 +113,7 @@ class DataXceiverServer implements Runnable {
 		this.spPool = new LinkedList<ServerPortalWorker>();
 		for (int i = 0; i < this.numOfServerPortalWorkers; i++) {
 			ServerPortalWorker spw = new ServerPortalWorker(workerUri, R4HProtocol.MAX_SEND_PACKETS + R4HProtocol.JX_SERVER_SPARE_MSGS,
-			        dnBridge.getWritePacketSize() + R4HProtocol.JX_BUF_SPARE , R4HProtocol.ACK_SIZE);
+			        dnBridge.getWritePacketSize() + R4HProtocol.JX_BUF_SPARE, R4HProtocol.ACK_SIZE);
 			spw.start();
 			spPool.add(spw);
 			LOG.info("Started new server portal worker thread: " + spw);
@@ -121,7 +121,6 @@ class DataXceiverServer implements Runnable {
 
 		LOG.trace(this.toString());
 	}
-
 
 	@Override
 	public void run() {
@@ -153,8 +152,8 @@ class DataXceiverServer implements Runnable {
 
 		if (spPool.isEmpty()) {
 			LOG.warn("ServerPortalWorker pool is empty. Allocating&Starting new SPW");
-			spw = new ServerPortalWorker(workerUri, R4HProtocol.MAX_SEND_PACKETS + R4HProtocol.JX_SERVER_SPARE_MSGS, dnBridge.getWritePacketSize() + R4HProtocol.JX_BUF_SPARE,
-			        R4HProtocol.ACK_SIZE);
+			spw = new ServerPortalWorker(workerUri, R4HProtocol.MAX_SEND_PACKETS + R4HProtocol.JX_SERVER_SPARE_MSGS, dnBridge.getWritePacketSize()
+			        + R4HProtocol.JX_BUF_SPARE, R4HProtocol.ACK_SIZE);
 			spw.start();
 		} else {
 			spw = spPool.remove(0);
@@ -165,7 +164,7 @@ class DataXceiverServer implements Runnable {
 		dxc.setServerPortalWorker(spw);
 		sp.forward(spw.sp, dxc.getSessionServer());
 		if (LOG.isDebugEnabled()) {
-			LOG.debug("After session forward: " + spw.sp);
+			LOG.debug("After session forward: spw=" + spw + " , uri=" + dxc.getUri());
 		}
 	}
 

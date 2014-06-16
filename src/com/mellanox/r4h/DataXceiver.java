@@ -103,7 +103,6 @@ class DataXceiver extends Receiver {
 			try {
 
 				if (isFirstRequest) {
-					LOG.info("Going to process pipeline reply for OPR header. uri=" + DataXceiver.this.uri);
 					processOPRHeaderRequest(msg);
 				} else {
 					if (LOG.isTraceEnabled()) {
@@ -206,9 +205,9 @@ class DataXceiver extends Receiver {
 			String logmsg = String.format("Client Session event: event=%s reason=%s ss=%s", session_event, reason, serverSession);
 			switch (session_event) {
 				case SESSION_CLOSED:
-					if (DataXceiver.this.clientSessionCloseEventExpected)  {
+					if (DataXceiver.this.clientSessionCloseEventExpected) {
 						LOG.info(logmsg);
-						clientSessionCloseEventExpected=false;
+						clientSessionCloseEventExpected = false;
 					} else {
 						LOG.error(logmsg);
 					}
@@ -239,6 +238,10 @@ class DataXceiver extends Receiver {
 
 	private void processOPRHeaderRequest(Msg msg) throws IOException, SecurityException, NoSuchFieldException, IllegalArgumentException,
 	        IllegalAccessException, NoSuchMethodException, URISyntaxException {
+		if (LOG.isTraceEnabled()) {
+			LOG.trace("Processing block header request. uri=" + DataXceiver.this.uri);
+		}
+
 		msg.getIn().position(0);
 		in = new DataInputStream(new ByteBufferInputStream(msg.getIn()));
 		Op op = readOp();
@@ -252,12 +255,12 @@ class DataXceiver extends Receiver {
 		}
 
 		if (LOG.isDebugEnabled()) {
-			LOG.debug("opWriteBlock: stage=" + oprHeader.getStage() + ", clientname=" + oprHeader.getClientName() + "\n  block  ="
-			        + oprHeader.getBlock() + ", newGs=" + oprHeader.getLatestGenerationStamp() + ", bytesRcvd=[" + oprHeader.getMinBytesRcvd() + ", "
-			        + oprHeader.getMaxBytesRcvd() + "]" + "\n  targets=" + Arrays.asList(oprHeader.getTargets()) + "; pipelineSize="
-			        + oprHeader.getPipelineSize() + ", srcDataNode=" + oprHeader.getSrcDataNode());
-			LOG.debug("isDatanode=" + oprHeader.isDatanode() + ", isClient=" + oprHeader.isClient() + ", isTransfer=" + oprHeader.isTransfer());
-			LOG.debug("writeBlock receive buf size " + currMsg.getIn().limit());
+			LOG.debug("uri= " + DataXceiver.this.uri + "\nopWriteBlock: stage=" + oprHeader.getStage() + ", clientname=" + oprHeader.getClientName()
+			        + "\n  block  =" + oprHeader.getBlock() + ", newGs=" + oprHeader.getLatestGenerationStamp() + ", bytesRcvd=["
+			        + oprHeader.getMinBytesRcvd() + ", " + oprHeader.getMaxBytesRcvd() + "]" + "\n  targets=" + Arrays.asList(oprHeader.getTargets())
+			        + "; pipelineSize=" + oprHeader.getPipelineSize() + ", srcDataNode=" + oprHeader.getSrcDataNode() + ", isDatanode="
+			        + oprHeader.isDatanode() + ", isClient=" + oprHeader.isClient() + ", isTransfer=" + oprHeader.isTransfer()
+			        + ", writeBlock receive buf size " + currMsg.getIn().limit());
 		}
 
 		// We later mutate block's generation stamp and length, but we need to
@@ -337,6 +340,10 @@ class DataXceiver extends Receiver {
 	}
 
 	private void processPacketRequest(final Msg msg) {
+		if (LOG.isTraceEnabled()) {
+			LOG.trace("Processing packet request. uri=" + DataXceiver.this.uri);
+		}
+
 		msg.getIn().position(0);
 
 		try {
@@ -368,6 +375,11 @@ class DataXceiver extends Receiver {
 			final boolean isLastPkt = pkt.isLastPacketInBlock();
 			final long seqNo = pkt.getSeqno();
 			final long offsetInBlock = pkt.getOffsetInBlock();
+
+			if (LOG.isDebugEnabled()) {
+				LOG.debug("After processing packet: " + pkt + "\nuri=" + DataXceiver.this.uri);
+			}
+
 			if (!hasPipeline()) {
 				packetAsyncIOExecutor.execute(new Runnable() {
 
@@ -455,7 +467,7 @@ class DataXceiver extends Receiver {
 		}
 
 		if (DataXceiver.this.clientSession != null) {
-			clientSessionCloseEventExpected=true;	
+			clientSessionCloseEventExpected = true;
 			DataXceiver.this.clientSession.close();
 		}
 	}
@@ -598,8 +610,15 @@ class DataXceiver extends Receiver {
 		replyAck.write(replyOut);
 		replyOut.flush();
 		if (async) {
+			if (LOG.isDebugEnabled()) {
+				LOG.debug("queue ack reply for async response : " + replyAck + "\nuri=" + uri);
+			}
 			this.serverPortalWorker.queueAsyncReply(serverSession, msg);
 		} else {
+			if (LOG.isDebugEnabled()) {
+				LOG.debug("send ack response  : " + replyAck + "\nuri=" + uri);
+			}
+
 			serverSession.sendResponse(msg);
 			// // if (LOG.isDebugEnabled()) {
 			// // LOG.debug("replyAck=" + replyAck);
@@ -609,12 +628,13 @@ class DataXceiver extends Receiver {
 
 	private void replyHeaderPipelineAck(Msg msg, Status mirrorInStatus, String firstBadLink) throws IOException {
 		if (LOG.isDebugEnabled() || mirrorInStatus != SUCCESS) {
-			LOG.info("Datanode " + oprHeader.getTargets().length + " forwarding connect ack to upstream firstbadlink is " + firstBadLink);
+			LOG.info("Datanode " + oprHeader.getTargets().length + " forwarding connect ack to upstream firstbadlink is " + firstBadLink + "\nuri=" + uri);
 		}
 		msg.getOut().clear();
-		BlockOpResponseProto.newBuilder().setStatus(mirrorInStatus).setFirstBadLink(firstBadLink).build()
-		        .writeDelimitedTo(new ByteBufferOutputStream(msg.getOut()));
+		BlockOpResponseProto protobuff = BlockOpResponseProto.newBuilder().setStatus(mirrorInStatus).setFirstBadLink(firstBadLink).build();
+		protobuff.writeDelimitedTo(new ByteBufferOutputStream(msg.getOut()));
 		serverSession.sendResponse(msg);
+		
 	}
 
 	ServerSession getSessionServer() {
@@ -623,7 +643,7 @@ class DataXceiver extends Receiver {
 
 	void close() {
 		if (DataXceiver.this.clientSession != null) {
-			clientSessionCloseEventExpected=true;	
+			clientSessionCloseEventExpected = true;
 			DataXceiver.this.clientSession.close();
 		}
 
@@ -753,11 +773,15 @@ class DataXceiver extends Receiver {
 
 				@Override
 				public void run() {
-					clientSessionCloseEventExpected=true;	
+					clientSessionCloseEventExpected = true;
 					cs.close();
 				}
 			});
 		}
 	}
+
+	public String getUri() {
+		return this.uri;
+    }
 
 }

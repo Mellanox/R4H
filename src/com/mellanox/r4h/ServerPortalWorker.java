@@ -103,7 +103,7 @@ public class ServerPortalWorker {
 
 	@Override
 	public String toString() {
-		return String.format("ServerPortalWorker{thread='%s', sp='%s', ioBufferPool='%s'}", th, sp, ioBufferPool);
+		return String.format("ServerPortalWorker{thread='%s', sp='%s', ioBufferPoolSize='%s'}", th, sp, ioBufferPool.size());
 	}
 
 	public synchronized ByteBuffer getAsyncIOBuffer() throws IOException {
