@@ -15,12 +15,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.mellanox.r4h;
+package org.apache.hadoop.hdfs;
 
 import static org.apache.hadoop.hdfs.protocol.proto.DataTransferProtos.Status.SUCCESS;
 
 import java.io.BufferedOutputStream;
-import java.io.DataInput;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.FileNotFoundException;
@@ -32,21 +31,16 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.nio.BufferOverflowException;
-import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.EnumSet;
-import java.util.Hashtable;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.fs.CanSetDropBehind;
 import org.apache.hadoop.fs.CreateFlag;
@@ -55,7 +49,8 @@ import org.apache.hadoop.fs.FileAlreadyExistsException;
 import org.apache.hadoop.fs.ParentNotDirectoryException;
 import org.apache.hadoop.fs.Syncable;
 import org.apache.hadoop.fs.permission.FsPermission;
-import org.apache.hadoop.hdfs.DFSConfigKeys;
+import org.apache.hadoop.hdfs.client.HdfsDataOutputStream;
+import org.apache.hadoop.hdfs.client.HdfsDataOutputStream.SyncFlag;
 import org.apache.hadoop.hdfs.protocol.DSQuotaExceededException;
 import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
 import org.apache.hadoop.hdfs.protocol.ExtendedBlock;
@@ -85,13 +80,11 @@ import org.apache.hadoop.io.EnumSetWritable;
 import org.apache.hadoop.io.IOUtils;
 import org.apache.hadoop.ipc.RemoteException;
 import org.apache.hadoop.net.NetUtils;
-import org.apache.hadoop.record.Utils;
 import org.apache.hadoop.security.AccessControlException;
 import org.apache.hadoop.security.token.Token;
 import org.apache.hadoop.util.Daemon;
 import org.apache.hadoop.util.DataChecksum;
 import org.apache.hadoop.util.Progressable;
-import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.util.Time;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -100,13 +93,6 @@ import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
 import com.google.common.cache.RemovalListener;
 import com.google.common.cache.RemovalNotification;
-import com.mellanox.jxio.ClientSession;
-import com.mellanox.jxio.EventName;
-import com.mellanox.jxio.EventReason;
-import com.mellanox.jxio.Msg;
-import com.mellanox.jxio.ClientSession.Callbacks;
-import com.mellanox.jxio.MsgPool;
-import com.mellanox.r4h.client.HdfsDataOutputStream.SyncFlag;
 
 
 /****************************************************************
@@ -134,55 +120,6 @@ import com.mellanox.r4h.client.HdfsDataOutputStream.SyncFlag;
 @InterfaceAudience.Private
 public class DFSOutputStream extends FSOutputSummer
     implements Syncable, CanSetDropBehind {
-	
-	// RDFS stuff from here.
-	private static final Log LOG = LogFactory.getLog(DFSOutputStream.class);
-	private static boolean toPrintBreakdown = false;
-	private static long lastOperationTS = 0;
-	private Object lastOperationTSLock = new Object();
-
-	private boolean toEnablePcktHist = false;
-	private Hashtable<Long, Long> insertTimes = new Hashtable<Long, Long>();
-	private Hashtable<Long, Long> fetchTimes = new Hashtable<Long, Long>();
-
-	// Packet-resolution profiling
-	private boolean toProfilePacketsRT = false;
-	private Hashtable<Long, Long> packetsStats = new Hashtable<Long, Long>();
-	public Hashtable<Long, Long> packetsArrivedStats = new Hashtable<Long, Long>();
-	private Hashtable<Long, Long> packetsStreamerProcessTimeMicro = new Hashtable<Long, Long>();
-
-	// The client session. A new client session is created per block.
-	private ClientSession clientSession;
-	// Our session callbacks. These replace important functionality that was related to waiting on ackQ etc.
-	// We have only one instance of the callbacks object, and reuse it for all blocks.
-	private Callbacks clientSessionCallbacks;
-	// The event queue handler. We have only one such, and reuse it for all blocks.
-	private R4HEventHandler eventQHandler = new R4HEventHandler(null, true);
-	// The name of next DN node we're talking to (we hold it here for logging purposes only).
-	private String nextDnName;
-	// The message pool that is used for connection to data nodes.
-	private MsgPool msgPool = null;
-	// First reply comes always from the header. Later replies come from messages. So this is a one-way flag.
-	private boolean isHeaderAck = true;
-	// *R4H* The pipe status, moved here following other changes.
-	private Status pipelineStatus = SUCCESS;
-	// Current status of reply from next DN.
-	private boolean currResult = false;
-	// Was there block header failure?
-	private boolean didHeaderFail = true;
-	// The sequence number of the current message being SENT (excluding the header).
-	private long sentSeqenceNum = -1;
-	// Whether got ack for last packet in block.
-	private boolean wasLastPacketAcked = false;
-	// How many times we would like to try the given pipeline before starting excluding datanodes one by one.
-	private final int NUM_OF_RETRIES_BEFORE_ABANDON = 3;
-
-	private ConcurrentLinkedQueue<Packet> dataQueue = new ConcurrentLinkedQueue<Packet>();
-	private ConcurrentLinkedQueue<Packet> ackQueue = new ConcurrentLinkedQueue<Packet>();
-	public boolean closeEventExpected = false;
-	
-	// End of r4h stuff
-	
   private final DFSClient dfsClient;
   private static final int MAX_PACKETS = 80; // each packet 64K, total 5MB
   private Socket s;
@@ -194,6 +131,8 @@ public class DFSOutputStream extends FSOutputSummer
   private final long blockSize;
   private final DataChecksum checksum;
   // both dataQueue and ackQueue are protected by dataQueue lock
+  private final LinkedList<Packet> dataQueue = new LinkedList<Packet>();
+  private final LinkedList<Packet> ackQueue = new LinkedList<Packet>();
   private Packet currentPacket = null;
   private DataStreamer streamer;
   private long currentSeqno = 0;
@@ -366,309 +305,6 @@ public class DFSOutputStream extends FSOutputSummer
       " lastByteOffsetInBlock: " + this.getLastByteOffsetBlock();
     }
   }
-  
-	class CSCallbacks implements com.mellanox.jxio.ClientSession.Callbacks {
-
-		private long lastPacketArrived = 0;
-		private long countPacketArrived = 0;
-		private boolean wasSessionEstablished;
-
-		@Override
-		/**
-		 * The callback upon receiving a reply for message sent previously.
-		 * @param message
-		 * 		The ack message. Contains also the originally sent message.
-		 * @todo
-		 * 		To make sure we catch all exceptions here inside. Alternatively, do this in all places where we do 
-		 * 		eqh.runeventloop().
-		 */
-		public void onResponse(Msg message) {
-			boolean wasMessageReturned = false;
-			if (DFSOutputStream.LOG.isTraceEnabled()) {
-				DFSOutputStream.LOG.trace("DFSClient got a reply message.");
-			}
-
-			message.getIn().clear();
-			message.getOut().clear();
-
-			do {
-				if (isHeaderAck) {
-					// Handle header ack:
-					String firstBadLink = "";
-					ByteBuffer msgBuf = message.getIn();
-
-					// receive ack for connect
-					BlockOpResponseProto resp = null;
-					try {
-						resp = BlockOpResponseProto.parseFrom(HdfsProtoUtil.vintPrefixed(new ByteBufferInputStream(msgBuf)));
-					} catch (IOException e) {
-						didHeaderFail = true;
-						currResult = false;
-						streamer.setLastException((IOException) e);
-						DFSOutputStream.LOG.error(DFSOutputStream.this.toString() + "Got exception while parsing header: " + e);
-						break;
-					}
-					pipelineStatus = resp.getStatus();
-					firstBadLink = resp.getFirstBadLink();
-
-					if (pipelineStatus != SUCCESS) {
-						didHeaderFail = true;
-						currResult = false;
-						if (pipelineStatus == Status.ERROR_ACCESS_TOKEN) {
-							streamer.setLastException(new InvalidBlockTokenException("Got access token error for connect ack with firstBadLink as "
-							        + firstBadLink));
-							DFSOutputStream.LOG.error(DFSOutputStream.this.toString() + "Got access token error for connect ack with firstBadLink as " + firstBadLink);
-						} else {
-							streamer.setLastException(new IOException("Bad connect ack with firstBadLink as " + firstBadLink));
-							DFSOutputStream.LOG.error(DFSOutputStream.this.toString() + "Bad connect ack with firstBadLink as " + firstBadLink);
-						}
-
-					} else {
-						if (DFSOutputStream.LOG.isDebugEnabled()) {
-							DFSOutputStream.LOG.debug(DFSOutputStream.this.toString() + String.format("Got header ack and parsed it successfully"));
-						}
-						currResult = true;
-						isHeaderAck = false;
-						didHeaderFail = false;
-
-						if (toPrintBreakdown) {
-							long now = System.nanoTime();
-							DFSOutputStream.LOG.info(DFSOutputStream.this.toString() + String.format("%.3f", (float) now / 1000000000.) + ", " + (now - lastOperationTS) / 1000000000.
-							        + " : header ack was parsed successfully.");
-							synchronized (lastOperationTSLock) {
-								lastOperationTS = now;
-							}
-						}
-					}
-				} else {
-					long now = System.nanoTime();
-					long lastPacketDiff = (now - lastPacketArrived) / 1000;
-					lastPacketArrived = now;
-
-					if (DFSOutputStream.LOG.isTraceEnabled()) {
-						DFSOutputStream.LOG.trace("Handling message ack...");
-					}
-
-					// Handle regular message ack:
-					PipelineAck ack = new PipelineAck();
-
-					try {
-						// read an ack from the pipeline
-						InputStream ackInputStream = new DataInputStream(new ByteBufferInputStream(message.getIn()));
-						ack.readFields(ackInputStream);
-						// // DEBUG
-						// DFSOutputStream.LOG.info("DFSClient for block " + DFSOutputStream.this.streamer.block + " " + ack);
-						// // DEBUG
-
-						if (toProfilePacketsRT) {
-							packetsArrivedStats.put(ack.getSeqno(), lastPacketDiff);
-							Long key = new Long(ack.getSeqno());
-							if (packetsStats.containsKey(key)) {
-								long sentTime = packetsStats.get(key);
-								long diff = (now - sentTime) / 1000;
-								packetsStats.put(ack.getSeqno(), new Long(diff));
-							}
-						}
-
-						if (DFSOutputStream.LOG.isDebugEnabled()) {
-							DFSOutputStream.LOG.debug(DFSOutputStream.this.toString() + " - DFSClient for block " + DFSOutputStream.this.streamer.block + " " + ack);
-						}
-						// processes response status from all datanodes.
-						for (int i = ack.getNumOfReplies() - 1; i >= 0 && dfsClient.clientRunning; i--) {
-							Status reply = ack.getReply(i);
-							if (reply != SUCCESS) {
-								// Set first bad datanode
-								String errorMsg = "Bad response " + reply + " for block " + DFSOutputStream.this.streamer.block + " from datanode ";
-								if (i < DFSOutputStream.this.streamer.nodes.length) { // the usual and expected case
-									streamer.errorIndex = i;
-									errorMsg += DFSOutputStream.this.streamer.nodes[streamer.errorIndex].getName();
-								} // the unexpected case
-								else {
-									// It's a lie, but this is the best lie we can think of ;)
-									streamer.errorIndex = DFSOutputStream.this.streamer.nodes.length - 1;
-									errorMsg += DFSOutputStream.this.streamer.nodes[streamer.errorIndex].getName() + ". Actually it was " + i
-									        + "'s datanode.";
-								}
-
-								streamer.setLastException(new IOException(errorMsg));
-								currResult = false;
-								break;
-							}
-						}
-
-						if (!currResult) {
-							break;
-						}
-
-						long seqno = ack.getSeqno();
-
-						if (seqno == Packet.HEART_BEAT_SEQNO) { // a heartbeat ack
-							break;
-						}
-
-						PacketHeader sentPcktHeader = new PacketHeader();
-						DataInput in = new DataInputStream(new ByteBufferInputStream(message.getOut()));
-						int headerStart = Utils.readVInt(in);
-						message.getOut().position(headerStart);
-						sentPcktHeader.readFields(message.getOut());
-
-						if (DFSOutputStream.LOG.isTraceEnabled()) {
-							DFSOutputStream.LOG.trace(String.format("Received ack with seq #%d, last pckt in block:%b. Sent seq #%d", seqno,
-							        sentPcktHeader.isLastPacketInBlock(), sentSeqenceNum));
-						}
-
-						Packet one = ackQueue.peek();
-
-						if (one.seqno != seqno) {
-							throw new IOException("PacketReply: Expecting seqno " + " for block " + DFSOutputStream.this.streamer.block + " "
-							        + one.seqno + " but received " + seqno);
-						}
-
-						assert ack.getSeqno() == lastAckedSeqno + 1;
-						lastAckedSeqno = ack.getSeqno();
-
-						// update bytesAcked
-						streamer.block.setNumBytes(one.getLastByteOffsetBlock());
-
-						// Return used message to pool
-						synchronized (DFSOutputStream.this.msgPool) {
-							message.returnToParentPool();
-						}
-						wasMessageReturned = true;
-						ackQueue.poll();
-
-						// Check if this is ack for last message in block:
-						if (sentPcktHeader.isLastPacketInBlock() && (seqno == sentSeqenceNum)) {
-							// Got ack for last packet in block.
-							wasLastPacketAcked = true;
-							isHeaderAck = true;
-							currResult = false; 
-							synchronized (ackQueue) {
-								ackQueue.notify();
-							}
-							if (toPrintBreakdown) {
-								long now5 = System.nanoTime();
-								DFSOutputStream.LOG.info(String.format("%.3f", (float) now5 / 1000000000.) + ", " + (now5 - lastOperationTS)
-								        / 1000000000. + " : last packet in block ack was parsed successfully.");
-								synchronized (lastOperationTSLock) {
-									lastOperationTS = now5;
-								}
-							}
-							closeEventExpected = true;
-							clientSession.close();
-							clientSession = null;
-						}
-
-						if (LOG.isDebugEnabled()) {
-							if (wasLastPacketAcked) {
-								LOG.debug("Got message ack and parsed it successfully. This was the last message in the block.");
-							} else {
-								LOG.debug("Got message ack and parsed it successfully.");
-							}
-						}
-
-					} catch (Exception e) {
-						DFSOutputStream.LOG.error(DFSOutputStream.this.toString() + "Got exception during processing of reply message: " + StringUtils.stringifyException(e));
-
-						if (!closed) {
-							DFSOutputStream.this.streamer.hasError = true;
-							if (e instanceof IOException) {
-								streamer.setLastException((IOException) e);
-							}
-							DFSOutputStream.LOG.error(DFSOutputStream.this.toString() + "DFSOutputStream onMsg exception " + " for block " + DFSOutputStream.this.streamer.block + e);
-							closed = true;
-						}
-					}
-				}
-			} while (false);
-
-			if (!wasMessageReturned) {
-				synchronized (DFSOutputStream.this.msgPool) {
-					message.returnToParentPool();
-				}
-			}
-
-		}
-
-		@Override
-		/**
-		 * @todo
-		 * To make sure we catch all exceptions here inside. Alternatively, do this in all places where we do 
-		 * eqh.runeventloop().
-		 */
-		public void onSessionEstablished() {
-			wasSessionEstablished = true;
-			if (toPrintBreakdown) {
-				long now = System.nanoTime();
-				DFSOutputStream.LOG.info(DFSOutputStream.this.toString() + String.format("%.3f", (float) now / 1000000000.) + ", " + (now - lastOperationTS) / 1000000000.
-				        + " : Successfully established client session.");
-				synchronized (lastOperationTSLock) {
-					lastOperationTS = now;
-				}
-			} else {
-				LOG.debug(DFSOutputStream.this.toString() + String.format("Successfully established client session on %s", DFSOutputStream.this.nextDnName));
-			}
-		}
-
-		@Override
-		/**
-		 * @todo
-		 * To make sure we catch all exceptions here inside. Alternatively, do this in all places where we do
-		 * eqh.runeventloop().
-		 */
-		public void onSessionEvent(EventName session_event, EventReason reason) {
-			switch (session_event) {
-				case SESSION_CLOSED:
-					String logmsg = String.format("Client Session event=%s, reason=%s", session_event, reason);
-					if (DFSOutputStream.this.closeEventExpected) {
-						if (DFSOutputStream.LOG.isDebugEnabled()) {
-							DFSOutputStream.LOG.debug(DFSOutputStream.this.toString() + logmsg);
-						}
-					} else {
-						DFSOutputStream.LOG.error(DFSOutputStream.this.toString() + logmsg);
-					}
-					break;
-				case SESSION_ERROR:
-				case SESSION_REJECT:
-					if (isHeaderAck) {
-						didHeaderFail = true;
-						DFSOutputStream.LOG.error(DFSOutputStream.this.toString() + String.format(
-						        "Session error occurred before header ack was received: session=%s, event=%s, reason=%s",
-						        DFSOutputStream.this.clientSession, session_event, reason));
-					} else {
-						DFSOutputStream.LOG.error(DFSOutputStream.this.toString() + String.format("Session error occurred in the middle of the block: session=%s, event=%s, reason=%s",
-						        DFSOutputStream.this.clientSession, session_event, reason));
-					}
-					// Break the event loop, returning the context to where the event loop was run originally
-					DFSOutputStream.this.eventQHandler.breakEventLoop();
-					// TODO: handle error!
-					break;
-				default:
-					break;
-			}
-		}
-
-		/**
-		 * @param msg
-		 * @param reason
-		 */
-		@Override
-		public void onMsgError(Msg msg, EventReason reason) {
-			msg.returnToParentPool();
-			// TODO: this.close() ? - recover ?
-			// TODO: set clientSession to null after closing it and check if null everywhere.
-			// This will solve the bug when more than one message has error and so the client session is closed more than once.
-			if (clientSession != null) {
-				DFSOutputStream.LOG.error(DFSOutputStream.this.toString() + String.format("Msg error occurred: reason=%s, countPacketArrived=%d", reason, countPacketArrived));
-				closeEventExpected = true;
-				clientSession.close();
-				clientSession = null;
-			} else if (LOG.isDebugEnabled()) {
-				DFSOutputStream.LOG.debug(DFSOutputStream.this.toString() + String.format("Msg error occurred: reason=%s, countPacketArrived=%d", reason, countPacketArrived));
-			}
-		}
-	}
-
 
   //
   // The DataStreamer class is responsible for sending data packets to the
@@ -876,7 +512,7 @@ public class DFSOutputStream extends FSOutputSummer
             if (dataQueue.isEmpty()) {
               one = new Packet();  // heartbeat packet
             } else {
-              one = dataQueue.peek(); // regular data packet
+              one = dataQueue.getFirst(); // regular data packet
             }
           }
           assert one != null;
@@ -927,8 +563,8 @@ public class DFSOutputStream extends FSOutputSummer
           synchronized (dataQueue) {
             // move packet from dataQueue to ackQueue
             if (!one.isHeartbeatPacket()) {
-              dataQueue.poll();
-              ackQueue.add(one);
+              dataQueue.removeFirst();
+              ackQueue.addLast(one);
               dataQueue.notifyAll();
             }
           }
@@ -1196,7 +832,7 @@ public class DFSOutputStream extends FSOutputSummer
             // a success ack for a data packet
             Packet one;
             synchronized (dataQueue) {
-              one = ackQueue.peek();
+              one = ackQueue.getFirst();
             }
             if (one.seqno != seqno) {
               throw new IOException("ResponseProcessor: Expecting seqno " +
@@ -1219,7 +855,7 @@ public class DFSOutputStream extends FSOutputSummer
 
             synchronized (dataQueue) {
               lastAckedSeqno = seqno;
-              ackQueue.poll();
+              ackQueue.removeFirst();
               dataQueue.notifyAll();
             }
           } catch (Exception e) {
@@ -1264,7 +900,7 @@ public class DFSOutputStream extends FSOutputSummer
 
       // move packets from ack queue to front of the data queue
       synchronized (dataQueue) {
-        dataQueue.addAll(ackQueue);
+        dataQueue.addAll(0, ackQueue);
         ackQueue.clear();
       }
 
@@ -2030,7 +1666,7 @@ public class DFSOutputStream extends FSOutputSummer
   private void queueCurrentPacket() {
     synchronized (dataQueue) {
       if (currentPacket == null) return;
-      dataQueue.add(currentPacket);
+      dataQueue.addLast(currentPacket);
       lastQueuedSeqno = currentPacket.seqno;
       if (DFSClient.LOG.isDebugEnabled()) {
         DFSClient.LOG.debug("Queued packet " + currentPacket.seqno);
