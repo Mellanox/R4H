@@ -13,11 +13,13 @@
     <target name="cdh44">
 	<property name="hadoopdir" value="/.autodirect/acclgwork/ufa/HDFS/hadoop-2.0.0-cdh4.4.0-SNAPSHOT/share/hadoop" />
 	<property name="matching-src" value="r4h-cdh4.4" />
+	<property name="jar-title" value="R4H-CDH44" />
     </target>
     <target  name="cdh5">
-	<property name="hadoopdir" value="/.autodirect/acclgwork/ufa/HDFS/hadoop-2.0.0-cdh5/share/hadoop" />
+	    <property name="hadoopdir" value="/.autodirect/acclgwork/ufa/HDFS/hadoop-2.3.0-cdh5.0.2/share/hadoop" />
 	<property name="matching-src" value="r4h-cdh5" />
 	<antcall target="build" />
+	<property name="jar-title" value="R4H-CDH5" />
     </target>
     <target name="init">
         <mkdir dir="build"/>
@@ -77,7 +79,8 @@
 	    <jar destfile="build/r4h.jar" basedir="build/" includes="**/*.class">
 	       <manifest>
 		       <section	name="RDMA For HDFS">
-		       <attribute name="Implementation-Title" value="R4H"/>
+			       <attribute name="Implementation-Title"
+				       value="${jar-title}"/>
 		       <attribute name="Implementation-Version" value="${gitver}"/>
 		       <attribute name="Implementation-Vendor" value="Mellanox"/>
 		       </section>
