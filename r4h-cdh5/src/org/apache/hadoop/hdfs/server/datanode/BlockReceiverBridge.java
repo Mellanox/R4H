@@ -73,7 +73,7 @@ public class BlockReceiverBridge extends BlockReceiver {
 	        IllegalAccessException, NoSuchMethodException {
 		super(oprHeader.getBlock(), inForHeaderOnly, sessionInfo, sessionInfo, oprHeader.getStage(), oprHeader.getLatestGenerationStamp(), oprHeader
 		        .getMinBytesRcvd(), oprHeader.getMaxBytesRcvd(), oprHeader.getClientName(), oprHeader.getSrcDataNode(), dnEx.getDN(), oprHeader
-		        .getRequestedChecksum());
+		        .getRequestedChecksum(), oprHeader.getCachingStrategy());
 		serverPortalWorker=spw;
 		singleThreadExecutor = diskIOexecutorService;
 		// TODO: check if it is really a newSingleThreadExecutor
@@ -146,11 +146,11 @@ public class BlockReceiverBridge extends BlockReceiver {
 		final long endTime = ClientTraceLog.isInfoEnabled() ? System.nanoTime() : 0;
 		oprHeader.getBlock().setNumBytes(replicaInfo.getNumBytes());
 		getDataNode().data.finalizeBlock(oprHeader.getBlock());
-		getDataNode().closeBlock(oprHeader.getBlock(), DataNode.EMPTY_DEL_HINT);
+		getDataNode().closeBlock(oprHeader.getBlock(), DataNode.EMPTY_DEL_HINT, replicaInfo.getStorageUuid());
 		if (ClientTraceLog.isInfoEnabled() && oprHeader.isClient()) {
 			DatanodeRegistration dnR = getDataNode().getDNRegistrationForBP(oprHeader.getBlock().getBlockPoolId());
 			LOG.info(String.format(DN_CLIENTTRACE_FORMAT, ssInfo, getDataNode().getXferAddress(), oprHeader.getBlock().getNumBytes(), "HDFS_WRITE",
-			        oprHeader.getClientName(), offset, dnR.getStorageID(), oprHeader.getBlock(), endTime - startTime));
+			        oprHeader.getClientName(), offset, dnR.getDatanodeUuid(), oprHeader.getBlock(), endTime - startTime));
 		} else {
 			LOG.info("Received " + oprHeader.getBlock() + " size " + oprHeader.getBlock().getNumBytes() + " from " + inAddr);
 		}

@@ -35,9 +35,9 @@ import java.util.concurrent.Executors;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.hadoop.hdfs.ShortCircuitShm.SlotId;
 import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
 import org.apache.hadoop.hdfs.protocol.ExtendedBlock;
-import org.apache.hadoop.hdfs.protocol.HdfsProtoUtil;
 import org.apache.hadoop.hdfs.protocol.datatransfer.BlockConstructionStage;
 import org.apache.hadoop.hdfs.protocol.datatransfer.Op;
 import org.apache.hadoop.hdfs.protocol.datatransfer.PacketHeader;
@@ -46,6 +46,7 @@ import org.apache.hadoop.hdfs.protocol.datatransfer.Receiver;
 import org.apache.hadoop.hdfs.protocol.datatransfer.Sender;
 import org.apache.hadoop.hdfs.protocol.proto.DataTransferProtos.BlockOpResponseProto;
 import org.apache.hadoop.hdfs.protocol.proto.DataTransferProtos.Status;
+import org.apache.hadoop.hdfs.protocolPB.PBHelper;
 
 import com.mellanox.jxio.ClientSession;
 import com.mellanox.jxio.EventName;
@@ -56,6 +57,7 @@ import com.mellanox.jxio.ServerSession;
 import com.mellanox.jxio.ServerSession.SessionKey;
 
 import org.apache.hadoop.hdfs.server.datanode.BlockReceiverBridge;
+import org.apache.hadoop.hdfs.server.datanode.CachingStrategy;
 import org.apache.hadoop.hdfs.server.datanode.DataNodeBridge;
 import org.apache.hadoop.hdfs.server.protocol.DatanodeRegistration;
 import org.apache.hadoop.io.IOUtils;
@@ -321,7 +323,7 @@ class DataXceiver extends Receiver {
 		// read connect ack (only for clients, not for replication req)
 		if (oprHeader.isClient()) {
 			msg.getIn().position(0);
-			BlockOpResponseProto connectAck = BlockOpResponseProto.parseFrom(HdfsProtoUtil.vintPrefixed(new ByteBufferInputStream(msg.getIn())));
+			BlockOpResponseProto connectAck = BlockOpResponseProto.parseFrom(PBHelper.vintPrefixed(new ByteBufferInputStream(msg.getIn())));
 			Status mirrorInStatus = connectAck.getStatus();
 			String firstBadLink = connectAck.getFirstBadLink();
 			if (LOG.isDebugEnabled() || mirrorInStatus != SUCCESS) {
@@ -425,7 +427,6 @@ class DataXceiver extends Receiver {
 				// pipelineContext.notifyAll();
 				// }
 				packetAsyncIOExecutor.execute(new Runnable() {
-
 					@Override
 					public void run() {
 						try {
@@ -578,7 +579,7 @@ class DataXceiver extends Receiver {
 		DataOutputStream mirrorOut = new DataOutputStream(new ByteBufferOutputStream(mirror.getOut()));
 		new Sender(mirrorOut).writeBlock(origBlk, oprHeader.getBlockToken(), oprHeader.getClientName(), oprHeader.getTargets(),
 		        oprHeader.getSrcDataNode(), oprHeader.getStage(), oprHeader.getPipelineSize(), oprHeader.getMinBytesRcvd(),
-		        oprHeader.getMaxBytesRcvd(), oprHeader.getLatestGenerationStamp(), oprHeader.getRequestedChecksum());
+		        oprHeader.getMaxBytesRcvd(), oprHeader.getLatestGenerationStamp(), oprHeader.getRequestedChecksum(), oprHeader.getCachingStrategy());
 		mirrorOut.flush();
 		clientSession.sendRequest(mirror);
 	}
@@ -664,19 +665,31 @@ class DataXceiver extends Receiver {
 	}
 
 	@Override
-	public void readBlock(ExtendedBlock blk, Token<BlockTokenIdentifier> blockToken, String clientName, long blockOffset, long length,
-	        boolean sendChecksum) throws IOException {
+	public void readBlock(final ExtendedBlock block,
+		      final Token<BlockTokenIdentifier> blockToken,
+		      final String clientName,
+		      final long blockOffset,
+		      final long length,
+		      final boolean sendChecksum,
+		      final CachingStrategy cachingStrategy) throws IOException {
 		// TODO Auto-generated method stub
-
 	}
 
 	@Override
-	public void writeBlock(ExtendedBlock block, Token<BlockTokenIdentifier> blockToken, String clientName, DatanodeInfo[] targets,
-	        DatanodeInfo source, BlockConstructionStage stage, int pipelineSize, long minBytesRcvd, long maxBytesRcvd, long latestGenerationStamp,
-	        DataChecksum requestedChecksum) throws IOException {
-		oprHeader = new WriteOprHeader(block, blockToken, clientName, targets, source, stage, pipelineSize, minBytesRcvd, maxBytesRcvd,
-		        latestGenerationStamp, requestedChecksum);
-
+	  public void writeBlock(final ExtendedBlock block,
+		      final Token<BlockTokenIdentifier> blockToken,
+		      final String clientname,
+		      final DatanodeInfo[] targets,
+		      final DatanodeInfo srcDataNode,
+		      final BlockConstructionStage stage,
+		      final int pipelineSize,
+		      final long minBytesRcvd,
+		      final long maxBytesRcvd,
+		      final long latestGenerationStamp,
+		      DataChecksum requestedChecksum,
+		      CachingStrategy cachingStrategy) throws IOException {
+		oprHeader = new WriteOprHeader(block, blockToken, clientname, targets, srcDataNode, stage, pipelineSize, minBytesRcvd, maxBytesRcvd,
+		        latestGenerationStamp, requestedChecksum, cachingStrategy);
 	}
 
 	// TODO: this method is copied from original DXC. Need to consider reuse instead, maybe by inheritance+reflection
@@ -719,10 +732,13 @@ class DataXceiver extends Receiver {
 	}
 
 	@Override
-	public void requestShortCircuitFds(ExtendedBlock blk, Token<BlockTokenIdentifier> blockToken, int maxVersion) throws IOException {
+	  public void requestShortCircuitFds(final ExtendedBlock blk,
+		      final Token<BlockTokenIdentifier> token,
+		      SlotId slotId, int maxVersion) throws IOException {
 		// TODO Auto-generated method stub
 
 	}
+
 
 	@Override
 	public void replaceBlock(ExtendedBlock blk, Token<BlockTokenIdentifier> blockToken, String delHint, DatanodeInfo source) throws IOException {
@@ -782,6 +798,18 @@ class DataXceiver extends Receiver {
 
 	public String getUri() {
 		return this.uri;
+    }
+
+	@Override
+    public void releaseShortCircuitFds(SlotId arg0) throws IOException {
+	    // TODO Auto-generated method stub
+	    
+    }
+
+	@Override
+    public void requestShortCircuitShm(String arg0) throws IOException {
+	    // TODO Auto-generated method stub
+	    
     }
 
 }
