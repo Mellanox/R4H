@@ -67,7 +67,6 @@
 		     <arg value="--dirty"/>
 	</exec>
 	<echo message="${ant.project.name}: ${ant.file}"/>
-	<echo message="!!!!!!!!hadoopdir=${hadoopdir}"/>
 	<javac debug="true" debuglevel="${debuglevel}" destdir="build" includeantruntime="false" source="${source}" target="${target}">
 	
 		<src path="${matching-src}/src"/>
