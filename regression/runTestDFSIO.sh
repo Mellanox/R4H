@@ -62,7 +62,7 @@ reduceDstat()
         cat ${DSTAT_TMP_PATH}/${file} >> ${SUM_FILE}
     done
     
-    CPU_TIMES=$(awk -f reduce-dstat.awk ${SUM_FILE})
+    CPU_TIMES=$(awk -f reduceDstat.awk ${SUM_FILE})
     
     # Temporary - get 100-IDLETIME
     CPU_TIMES=$(echo ${CPU_TIMES} | awk 'BEGIN{ FS="," } { print 100-$3 }')
