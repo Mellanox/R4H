@@ -17,13 +17,15 @@ runJob()
     local MAPS=$1
     local USE=$2
     echo "Cleaning ${TERAGEN_PATH}"
-    hdfs dfs -rm -r ${TERAGEN_PATH}
-    echo "Executing: hadoop jar $EXAMPLES_JAR teragen $USE ${jobSize} ${TERAGEN_PATH}"
-    hadoop jar $EXAMPLES_JAR teragen ${USE} -Ddfs.replication=${DFS_REPLICATION} -Dmapred.map.tasks=${MAPS} ${jobSize} ${TERAGEN_PATH} >> $LONG_LOG 2>&1
+    ${HDFS_EXEC} dfs -rm -r ${TERAGEN_PATH}
+    HISTORY_PATH=$(echo /user/history/done/$(date +%Y)/$(date +%m)/$(date +%d)/000000)
+    echo "Executing: ${HADOOP_EXEC} jar $EXAMPLES_JAR teragen $USE ${jobSize} ${TERAGEN_PATH}"
+    ${HADOOP_EXEC} jar $EXAMPLES_JAR teragen ${USE} -Ddfs.replication=${DFS_REPLICATION} -Dmapred.map.tasks=${MAPS} ${jobSize} ${TERAGEN_PATH} >> $LONG_LOG 2>&1
     if (($? != 0)); then
         FAILED_ATTEMPTS=$((FAILED_ATTEMPTS+1))
     else
-        HISTORY=`mapred job -history ${TERAGEN_PATH}`
+        HISTORY_FILE=$(${HDFS_EXEC} dfs -ls ${HISTORY_PATH} | grep .jhist | tail -1 | awk '{print $8}')
+        HISTORY=`${MAPRED_EXEC} job -history ${HISTORY_FILE}`
         START_TIME=`echo "$HISTORY" | grep "Launched At:" | awk '{ print $4 }'`
         FINISH_TIME=`echo "$HISTORY" | grep "Finished At:" | awk '{ print $4 }'`
         START_SEC=`date -d "$START_TIME" +%s`

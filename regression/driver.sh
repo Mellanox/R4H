@@ -12,8 +12,8 @@ errorHandler()
 
 restartCluster()
 {
-    hdfs dfs -rm -r "/*"
-    hdfs dfs -expunge
+    ${HDFS_EXEC} dfs -rm -r "/*"
+    ${HDFS_EXEC} dfs -expunge
     
     python cmHandler.py "stop"
     if (($? != 0)); then

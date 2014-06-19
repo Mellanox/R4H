@@ -30,7 +30,7 @@ if [[ -n "$RAN_DFSIOE" ]]; then
 fi
 
 # Produce Error Summary
-grep -A 10 "ERROR" ${LONG_LOG} > ${REPORT_PATH_ERROR}
+grep -v "IO_ERROR" ${LONG_LOG} | grep -A 10 "ERROR" > ${REPORT_PATH_ERROR}
 
 ## If error summary is empty - delete it
 if [[ ! -s ${REPORT_PATH_ERROR} ]]; then 

@@ -28,14 +28,18 @@ exportResultsToReport()
 runJob()
 {
     local USE=$1
+    HISTORY_PATH=$(echo /user/history/done/$(date +%Y)/$(date +%m)/$(date +%d)/000000)
     runDstat
-    hadoop jar $TEST_JAR TestDFSIO -Ddfs.replication=${DFS_REPLICATION} ${USE} -write -nrFiles ${nrFiles} -fileSize ${fileSize}MB -resFile $SHORT_LOG >> $LONG_LOG 2>&1
+    ${HADOOP_EXEC} jar $TEST_JAR TestDFSIO -Ddfs.replication=${DFS_REPLICATION} ${USE} -write -nrFiles ${nrFiles} -fileSize ${fileSize}MB -resFile $SHORT_LOG >> $LONG_LOG 2>&1
     succ=$?
     killDstat
+    
+    HISTORY_FILE=$(${HDFS_EXEC} dfs -ls ${HISTORY_PATH} | grep .jhist | tail -1 | awk '{print $8}')
+    
     if (($succ != 0)); then
         FAILED_ATTEMPTS=$((FAILED_ATTEMPTS+1))
     else
-        FAILED_KILLED_MAPPERS=$(mapred job -history ${DFSIO_WRITE_PATH} | grep -A 8 "Task Summary" | grep "Map" | awk '{print $4 + $5}')
+        FAILED_KILLED_MAPPERS=$(${MAPRED_EXEC} job -history ${HISTORY_FILE} | grep -A 8 "Task Summary" | grep "Map" | awk '{print $4 + $5}')
         FAILED_ATTEMPTS=$((FAILED_ATTEMPTS+FAILED_KILLED_MAPPERS))
     fi
     pdsh -w $SLAVES sync
@@ -73,7 +77,7 @@ reduceDstat()
 echo "program,numOfFiles,fileSize,min time,max time,avg time,min TP,max TP,avg TP,failed attempts,avg cpu" >> ${DFS_SHEET_CSV_PATH}
 
 echo "Changing hdfs /user permissions to 777..." | tee -a $LONG_LOG
-sudo -u hdfs hdfs dfs -chmod -R 777 /user
+sudo -u hdfs ${HDFS_EXEC} dfs -chmod -R 777 /user
 
 for fileSize in $fileSizeSet
 do 
@@ -83,31 +87,36 @@ do
         PROGRAM="UFA"
         SHORT_LOG="${LOG_PATH}short_${nrFiles}_${fileSize}_${PROGRAM}.log"
         FAILED_ATTEMPTS=0
-        RANGE=`echo "$ITERATIONS_R4H" | awk '{ for(i=1;i<=$1;i++) print i;}' | tr '\n' ' '`
-        
-        for i in $RANGE
-        do
-            echo "@@@@@@@@@@@@@@@@@@@ `date` : running ${PROGRAM} with ${nrFiles} file of size ${fileSize}MB, Run number ${i} out of $ITERATIONS_R4H @@@@@@@@@@@@@@@@@@@@@@@@" >> $LONG_LOG
-            runJob $USE_UFA
-        done
-        reduceDstat
-        exportResultsToReport
+        if [[ "$ITERATIONS_R4H" != "0" ]]; then
+            RANGE=`echo "$ITERATIONS_R4H" | awk '{ for(i=1;i<=$1;i++) print i;}' | tr '\n' ' '`
+            
+            for i in $RANGE
+            do
+                echo "@@@@@@@@@@@@@@@@@@@ `date` : running ${PROGRAM} with ${nrFiles} file of size ${fileSize}MB, Run number ${i} out of $ITERATIONS_R4H @@@@@@@@@@@@@@@@@@@@@@@@" >> $LONG_LOG
+                runJob $USE_UFA
+            done
+            reduceDstat
+            exportResultsToReport
+        fi
         
         # Vanilla Phase
         PROGRAM="VANILLA"
         SHORT_LOG="${LOG_PATH}short_${nrFiles}_${fileSize}_${PROGRAM}.log"
         FAILED_ATTEMPTS=0
-        RANGE=`echo "$ITERATIONS_VNL" | awk '{ for(i=1;i<=$1;i++) print i;}' | tr '\n' ' '`
-        for j in $RANGE
-        do
-            echo "@@@@@@@@@@@@@@@@@@@ `date` : running ${PROGRAM} with ${nrFiles} files of size ${fileSize}MB, Run number ${j} out of $ITERATIONS_VNL @@@@@@@@@@@@@@@@@@@@@@@@" >> $LONG_LOG
-            runJob
-        done
-        reduceDstat
-        exportResultsToReport
-
+        
+        if [[ "$ITERATIONS_VNL" != "0" ]]; then
+            RANGE=`echo "$ITERATIONS_VNL" | awk '{ for(i=1;i<=$1;i++) print i;}' | tr '\n' ' '`
+            for j in $RANGE
+            do
+                echo "@@@@@@@@@@@@@@@@@@@ `date` : running ${PROGRAM} with ${nrFiles} files of size ${fileSize}MB, Run number ${j} out of $ITERATIONS_VNL @@@@@@@@@@@@@@@@@@@@@@@@" >> $LONG_LOG
+                runJob
+            done
+            reduceDstat
+            exportResultsToReport
+        fi
+        
         # Cleaning Phase
         echo "@@@@@@@@@@@@@@@@@@@ `date` : cleaning TestDFSIO files @@@@@@@@@@@@@@@@@@@@@@@@" >> $LONG_LOG
-        hadoop jar $TEST_JAR TestDFSIO -clean >> $LONG_LOG 2>&1	
+        ${HADOOP_EXEC} jar $TEST_JAR TestDFSIO -clean >> $LONG_LOG 2>&1	
     done
 done

@@ -23,35 +23,37 @@ else:
   request = None
 
 for c in api.get_all_clusters():
-  if c.version == "CDH4":
-    cdh4 = c
+  if c.version == "CDH5":
+    cdh5 = c
 
-if cdh4 == None:
+if cdh5 == None:
   print "Could not find cluster. Exiting!"
   exit(1)
 
-for s in cdh4.get_all_services():
+hdfs = None
+yarn = None
+
+for s in cdh5.get_all_services():
   if s.type == "HDFS":
     print "Found HDFS service"
     hdfs = s
-  if s.type == "MAPREDUCE":
-    print "Found MAPREDUCE service"
-    mapred = s
+  if s.type == "YARN":
+    print "Found YARN service"
+    yarn = s
 
 if hdfs == None:
   print "Could not find HDFS service. Exiting!"
   exit(1)
-elif mapred == None:
-  print "Could not find MAPREDUCE service. Exiting!"
+elif yarn == None:
+  print "Could not find YARN service. Exiting!"
   exit(1)
 
-
 if request == "stop":
-  if mapred.serviceState == "STOPPED":
-    print "MAPREDUCE already stopped."
+  if yarn.serviceState == "STOPPED":
+    print "YARN already stopped."
   else:
-    print "Stopping MAPREDUCE..."
-    cmd = mapred.stop().wait()
+    print "Stopping YARN..."
+    cmd = yarn.stop().wait()
     checkCmdStatus(cmd)
   if hdfs.serviceState == "STOPPED":
     print "HDFS already stopped."
@@ -59,7 +61,7 @@ if request == "stop":
     print "Stopping HDFS..."
     cmd = hdfs.stop().wait()
     checkCmdStatus(cmd)
-  print "HDFS and MAPREDUCE stopped successfully!"
+  print "HDFS and YARN stopped successfully!"
 elif request == "start":
   if hdfs.serviceState == "STARTED":
     print "HDFS already started."
@@ -67,13 +69,13 @@ elif request == "start":
     print "Starting HDFS..."
     cmd = hdfs.start().wait()
     checkCmdStatus(cmd)
-  if mapred.serviceState == "STARTED":
-    print "MAPRED already started."
+  if yarn.serviceState == "STARTED":
+    print "YARN already started."
   else:
-    print "Starting MAPREDUCE..."
-    cmd = mapred.start().wait()
+    print "Starting YARN..."
+    cmd = yarn.start().wait()
     checkCmdStatus(cmd)
-  print "HDFS and MAPREDUCE started successfully!"
+  print "HDFS and YARN started successfully!"
 elif request == "format":
   namenode = None
   secNamenode = None

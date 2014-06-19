@@ -31,11 +31,13 @@ exportResultsToReport()
 runJob()
 {
     local USE=$1
-    hadoop jar $DATATOOLS_JAR org.apache.hadoop.fs.dfsioe.TestDFSIOEnh -bufferSize 4096 -plotInteval 1000 -sampleUnit m -sampleInteval 200 -sumThreshold 0.5 -Ddfs.replication=${DFS_REPLICATION} ${USE} -write -nrFiles ${nrFiles} -fileSize ${fileSize} -resFile $SHORT_LOG >> $LONG_LOG 2>&1
+    HISTORY_PATH=$(echo /user/history/done/$(date +%Y)/$(date +%m)/$(date +%d)/000000)
+    ${HADOOP_EXEC} jar $DATATOOLS_JAR org.apache.hadoop.fs.dfsioe.TestDFSIOEnh -bufferSize 4096 -plotInteval 1000 -sampleUnit m -sampleInteval 200 -sumThreshold 0.5 -Ddfs.replication=${DFS_REPLICATION} ${USE} -write -nrFiles ${nrFiles} -fileSize ${fileSize} -resFile $SHORT_LOG >> $LONG_LOG 2>&1
     if (($? != 0)); then
         FAILED_ATTEMPTS=$((FAILED_ATTEMPTS+1))
     else
-        FAILED_KILLED_MAPPERS=`mapred job -history ${DFSIOE_WRITE_PATH} | grep -A 8 "Task Summary" | grep "Map" | awk '{print $4 + $5}'`
+        HISTORY_FILE=$(${HDFS_EXEC} dfs -ls ${HISTORY_PATH} | grep .jhist | tail -1 | awk '{print $8}')
+        FAILED_KILLED_MAPPERS=`${MAPRED_EXEC} job -history ${HISTORY_FILE} | grep -A 8 "Task Summary" | grep "Map" | awk '{print $4 + $5}'`
         FAILED_ATTEMPTS=$((FAILED_ATTEMPTS+FAILED_KILLED_MAPPERS))
     fi
     pdsh -w $SLAVES sync
@@ -44,7 +46,7 @@ runJob()
 echo "program,numOfFiles,fileSize,min time,max time,avg time,min TP,max TP,avg TP,min aggTP,max aggTP,avg aggTP,failed attempts" >> $DFSIOE_SHEET_CSV_PATH
 
 echo "Changing hdfs /user permissions to 777..." | tee -a $LONG_LOG
-sudo -u hdfs hdfs dfs -chmod -R 777 /user
+sudo -u hdfs ${HDFS_EXEC} dfs -chmod -R 777 /user
 
 for fileSize in $fileSizeSet
 do 
@@ -76,6 +78,6 @@ do
 
         # Cleaning Phase
         echo "@@@@@@@@@@@@@@@@@@@ `date` : cleaning DFSIOEnh files @@@@@@@@@@@@@@@@@@@@@@@@" >> $LONG_LOG
-        hadoop jar $DATATOOLS_JAR org.apache.hadoop.fs.dfsioe.TestDFSIOEnh -clean >> $LONG_LOG 2>&1	
+        ${HADOOP_EXEC} jar $DATATOOLS_JAR org.apache.hadoop.fs.dfsioe.TestDFSIOEnh -clean >> $LONG_LOG 2>&1	
     done
 done
