@@ -200,8 +200,6 @@ import org.apache.hadoop.util.DataChecksum.Type;
 import org.apache.hadoop.util.Progressable;
 import org.apache.hadoop.util.Time;
 
-import sun.reflect.generics.reflectiveObjects.NotImplementedException;
-
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
@@ -1003,15 +1001,18 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory {
 		return open(src, buffersize, verifyChecksum);
 	}
 
-	/**
-	 * Create an input stream that obtains a nodelist from the
-	 * namenode, and then reads from all the right places. Creates
-	 * inner subclass of InputStream that does the right out-of-band
-	 * work.
-	 */
-	public DFSInputStream open(String src, int buffersize, boolean verifyChecksum) throws IOException, UnresolvedLinkException {
-		throw new NotImplementedException();
-	}
+	  /**
+	   * Create an input stream that obtains a nodelist from the
+	   * namenode, and then reads from all the right places.  Creates
+	   * inner subclass of InputStream that does the right out-of-band
+	   * work.
+	   */
+	  public DFSInputStream open(String src, int buffersize, boolean verifyChecksum)
+	      throws IOException, UnresolvedLinkException {
+	    checkOpen();
+	    //    Get block info from namenode
+	    return new DFSInputStream(this, src, buffersize, verifyChecksum);
+	  }
 
 	/**
 	 * Get the namenode associated with this DFSClient object
