@@ -25,10 +25,8 @@ public class BlockStorageLocationUtilBridge extends BlockStorageLocationUtil {
 		return BlockStorageLocationUtil.associateVolumeIdsWithBlocks(blocks, metadatas);
 	}
 
-	
-	public   static BlockStorageLocation[] convertToVolumeBlockLocations(
-		      List<LocatedBlock> blocks, 
-		      Map<LocatedBlock, List<VolumeId>> blockVolumeIds) throws IOException {
+	public static BlockStorageLocation[] convertToVolumeBlockLocations(List<LocatedBlock> blocks, Map<LocatedBlock, List<VolumeId>> blockVolumeIds)
+	        throws IOException {
 		return BlockStorageLocationUtil.convertToVolumeBlockLocations(blocks, blockVolumeIds);
 	}
 }

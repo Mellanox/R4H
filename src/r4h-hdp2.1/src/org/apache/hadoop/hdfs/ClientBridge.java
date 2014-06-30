@@ -7,4 +7,5 @@ public class ClientBridge {
 	public static String getUgiShortUserName(UserGroupInformation ugi) {
 		return ugi.getShortUserName();
 	}
+
 }
