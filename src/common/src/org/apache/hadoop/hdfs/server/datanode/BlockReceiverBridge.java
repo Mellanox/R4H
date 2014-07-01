@@ -46,14 +46,11 @@ import com.mellanox.r4h.AsyncFileOutputStream.AsyncWriteCompletion;
  * @see org.apache.hadoop.hdfs.server.datanode.DataNode It exposes the neccessary package access fields of DataNode to
  *      R4H
  */
-public class BlockReceiverBridge extends BlockReceiver {
+public class BlockReceiverBridge extends BlockReceiverBridgeBase {
 	private final static int NUM_OF_PREALLOC_PACKET_COPY_BUFFERS = R4HProtocol.MSG_POOLS_GROWTH_FACTOR * R4HProtocol.SERVER_MSG_POOL_SIZE;
 	private final static Log LOG = LogFactory.getLog(BlockReceiverBridge.class);
 	private Field inputStreamField;
 	private Method receivePacketMethod;
-	private DataNodeBridge exposedDN;
-	private Field outField;
-	private Field checksumOutField;
 	private Field mirrorOutField;
 	private WriteOprHeader oprHeader;
 	private ReplicaInPipelineInterface replicaInfo;
@@ -64,21 +61,18 @@ public class BlockReceiverBridge extends BlockReceiver {
 	private final ExecutorService singleThreadExecutor;
 	private ByteBuffer curCopyBuff;
 	private AsyncFileOutputStream asyncOut;
-	private AsyncFileOutputStream asyncCout;
 	private Field currPacketBufField;
 	private ServerPortalWorker serverPortalWorker;
 
-	public BlockReceiverBridge(ServerPortalWorker spw, WriteOprHeader oprHeader, DataInputStream inForHeaderOnly, String sessionInfo, DataNodeBridge dnEx,
-	        ExecutorService diskIOexecutorService) throws IOException, SecurityException, NoSuchFieldException, IllegalArgumentException,
-	        IllegalAccessException, NoSuchMethodException {
-		super(oprHeader.getBlock(), inForHeaderOnly, sessionInfo, sessionInfo, oprHeader.getStage(), oprHeader.getLatestGenerationStamp(), oprHeader
-		        .getMinBytesRcvd(), oprHeader.getMaxBytesRcvd(), oprHeader.getClientName(), oprHeader.getSrcDataNode(), dnEx.getDN(), oprHeader
-		        .getRequestedChecksum(), oprHeader.getCachingStrategy());
-		serverPortalWorker=spw;
+	public BlockReceiverBridge(ServerPortalWorker spw, WriteOprHeader oprHeader, DataInputStream inForHeaderOnly, String sessionInfo,
+	        DataNodeBridge dnEx, ExecutorService diskIOexecutorService) throws IOException, SecurityException, NoSuchFieldException,
+	        IllegalArgumentException, IllegalAccessException, NoSuchMethodException {
+		super(spw, oprHeader, inForHeaderOnly, sessionInfo, dnEx, diskIOexecutorService);
+		
+		serverPortalWorker = spw;
 		singleThreadExecutor = diskIOexecutorService;
 		// TODO: check if it is really a newSingleThreadExecutor
 		ssInfo = sessionInfo;
-		exposedDN = dnEx;
 		inputStreamField = BlockReceiver.class.getDeclaredField("in");
 		inputStreamField.setAccessible(true);
 		mirrorOutField = BlockReceiver.class.getDeclaredField("mirrorOut");
@@ -104,7 +98,8 @@ public class BlockReceiverBridge extends BlockReceiver {
 		return (PacketReceiver) packetReceiverField.get(this);
 	}
 
-	private void updatePacketCopyBuffer() throws IllegalArgumentException, IllegalAccessException, NoSuchFieldException, SecurityException, IOException {
+	private void updatePacketCopyBuffer() throws IllegalArgumentException, IllegalAccessException, NoSuchFieldException, SecurityException,
+	        IOException {
 		curCopyBuff = serverPortalWorker.getAsyncIOBuffer();
 		PacketReceiver receiver = getPacketReceiver();
 		currPacketBufField.set(receiver, curCopyBuff);
@@ -146,11 +141,10 @@ public class BlockReceiverBridge extends BlockReceiver {
 		final long endTime = ClientTraceLog.isInfoEnabled() ? System.nanoTime() : 0;
 		oprHeader.getBlock().setNumBytes(replicaInfo.getNumBytes());
 		getDataNode().data.finalizeBlock(oprHeader.getBlock());
-		getDataNode().closeBlock(oprHeader.getBlock(), DataNode.EMPTY_DEL_HINT, replicaInfo.getStorageUuid());
+		closeBlock();
 		if (ClientTraceLog.isInfoEnabled() && oprHeader.isClient()) {
-			DatanodeRegistration dnR = getDataNode().getDNRegistrationForBP(oprHeader.getBlock().getBlockPoolId());
 			LOG.info(String.format(DN_CLIENTTRACE_FORMAT, ssInfo, getDataNode().getXferAddress(), oprHeader.getBlock().getNumBytes(), "HDFS_WRITE",
-			        oprHeader.getClientName(), offset, dnR.getDatanodeUuid(), oprHeader.getBlock(), endTime - startTime));
+			        oprHeader.getClientName(), offset, getStorageID(), oprHeader.getBlock(), endTime - startTime));
 		} else {
 			LOG.info("Received " + oprHeader.getBlock() + " size " + oprHeader.getBlock().getNumBytes() + " from " + inAddr);
 		}
@@ -206,47 +200,46 @@ public class BlockReceiverBridge extends BlockReceiver {
 		Field streamsChecksumOutField = ReplicaOutputStreams.class.getDeclaredField("checksumOut");
 		streamsChecksumOutField.setAccessible(true);
 
-//		// Overriding checksum file output stream to be async - using reflection
-//		// ------------------------------------------------------
-//		Field coutField = BlockReceiver.class.getDeclaredField("cout");
-//		coutField.setAccessible(true);
-//		FileOutputStream cout = (FileOutputStream) coutField.get(this);
-//		checksumOutField = BlockReceiver.class.getDeclaredField("checksumOut");
-//		checksumOutField.setAccessible(true);
-//		// flush orig checksum stream
-////		OutputStream origChecksumOut = (OutputStream) checksumOutField.get(this);
-////		origChecksumOut.flush();
-//		// create new checksum stream with orig FD
-//		FileDescriptor checksumFd = cout.getFD();
-//		asyncCout = new AsyncFileOutputStream(checksumFd, singleThreadExecutor, new AsyncWriteCompletion() {
-//
-//			@Override
-//			public void onWriteComplete(Object context, IOException e) {
-//				if (LOG.isTraceEnabled()) {
-//					LOG.trace("on checksum write completion");
-//					if (context != null) {
-//						if (context instanceof PacketHeader) {
-//							LOG.trace("checksum output stream write completion for " + (PacketHeader) context);
-//						} else if (context instanceof AsyncFileOutputStream.AsyncWrite) {
-//							LOG.trace("checksum output stream write completion for " + (AsyncFileOutputStream.AsyncWrite) context);
-//						}
-//					}
-//
-//					if (e != null) {
-//						LOG.error("error during writing packet checksum to disk: " + StringUtils.stringifyException(e));
-//					}
-//				}
-//			}
-//		});
-//		asyncCout.limitAsyncIObyThreadID(Thread.currentThread().getId());
-//		OutputStream tmpChecksumOut = new DataOutputStream(new BufferedOutputStream(asyncCout, HdfsConstants.SMALL_BUFFER_SIZE));
-//		checksumOutField.set(this, tmpChecksumOut);
-//		coutField.set(this, asyncCout);
-//		streamsChecksumOutField.set(streams, asyncCout);
-//
-//		BlockMetadataHeader.writeHeader((DataOutputStream)tmpChecksumOut, streams.getChecksum());
+		// // Overriding checksum file output stream to be async - using reflection
+		// // ------------------------------------------------------
+		// Field coutField = BlockReceiver.class.getDeclaredField("cout");
+		// coutField.setAccessible(true);
+		// FileOutputStream cout = (FileOutputStream) coutField.get(this);
+		// checksumOutField = BlockReceiver.class.getDeclaredField("checksumOut");
+		// checksumOutField.setAccessible(true);
+		// // flush orig checksum stream
+		// // OutputStream origChecksumOut = (OutputStream) checksumOutField.get(this);
+		// // origChecksumOut.flush();
+		// // create new checksum stream with orig FD
+		// FileDescriptor checksumFd = cout.getFD();
+		// asyncCout = new AsyncFileOutputStream(checksumFd, singleThreadExecutor, new AsyncWriteCompletion() {
+		//
+		// @Override
+		// public void onWriteComplete(Object context, IOException e) {
+		// if (LOG.isTraceEnabled()) {
+		// LOG.trace("on checksum write completion");
+		// if (context != null) {
+		// if (context instanceof PacketHeader) {
+		// LOG.trace("checksum output stream write completion for " + (PacketHeader) context);
+		// } else if (context instanceof AsyncFileOutputStream.AsyncWrite) {
+		// LOG.trace("checksum output stream write completion for " + (AsyncFileOutputStream.AsyncWrite) context);
+		// }
+		// }
+		//
+		// if (e != null) {
+		// LOG.error("error during writing packet checksum to disk: " + StringUtils.stringifyException(e));
+		// }
+		// }
+		// }
+		// });
+		// asyncCout.limitAsyncIObyThreadID(Thread.currentThread().getId());
+		// OutputStream tmpChecksumOut = new DataOutputStream(new BufferedOutputStream(asyncCout, HdfsConstants.SMALL_BUFFER_SIZE));
+		// checksumOutField.set(this, tmpChecksumOut);
+		// coutField.set(this, asyncCout);
+		// streamsChecksumOutField.set(streams, asyncCout);
+		//
+		// BlockMetadataHeader.writeHeader((DataOutputStream)tmpChecksumOut, streams.getChecksum());
 
-		
 		// Overriding data file output stream to be async - using reflection
 		Field outField = BlockReceiver.class.getDeclaredField("out");
 		outField.setAccessible(true);
@@ -277,8 +270,8 @@ public class BlockReceiverBridge extends BlockReceiver {
 		outField.set(this, asyncOut);
 		streamsDataOutField.set(streams, asyncOut);
 
-//		Field diskChecksumField = BlockReceiver.class.getDeclaredField("diskChecksum");
-//		diskChecksumField.setAccessible(true);
+		// Field diskChecksumField = BlockReceiver.class.getDeclaredField("diskChecksum");
+		// diskChecksumField.setAccessible(true);
 	}
 
 	// TODO: toString()
