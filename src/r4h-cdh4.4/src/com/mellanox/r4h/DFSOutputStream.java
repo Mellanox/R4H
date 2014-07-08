@@ -557,9 +557,6 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable {
 							wasLastPacketAcked = true;
 							isHeaderAck = true;
 							currResult = false; 
-							synchronized (ackQueue) {
-								ackQueue.notify();
-							}
 							if (toPrintBreakdown) {
 								long now5 = System.nanoTime();
 								DFSOutputStream.LOG.info(String.format("%.3f", (float) now5 / 1000000000.) + ", " + (now5 - lastOperationTS)
@@ -601,7 +598,9 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable {
 					message.returnToParentPool();
 				}
 			}
-
+			synchronized (ackQueue) {
+				ackQueue.notify();
+			}
 		}
 
 		@Override

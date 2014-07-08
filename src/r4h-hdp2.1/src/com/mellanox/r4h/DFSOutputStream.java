@@ -556,9 +556,6 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 							wasLastPacketAcked = true;
 							isHeaderAck = true;
 							currResult = false;
-							synchronized (ackQueue) {
-								ackQueue.notify();
-							}
 							if (toPrintBreakdown) {
 								long now5 = System.nanoTime();
 								DFSOutputStream.LOG.info(String.format("%.3f", (float) now5 / 1000000000.) + ", " + (now5 - lastOperationTS)
@@ -601,6 +598,10 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 				synchronized (DFSOutputStream.this.msgPool) {
 					message.returnToParentPool();
 				}
+			}
+
+			synchronized (ackQueue) {
+				ackQueue.notify();
 			}
 
 		}
@@ -685,7 +686,6 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 				DFSOutputStream.LOG.debug(DFSOutputStream.this.toString()
 				        + String.format("Msg error occurred: reason=%s, countPacketArrived=%d", reason, countPacketArrived));
 			}
-
 		}
 	}
 
@@ -1843,33 +1843,35 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 			lastException.compareAndSet(null, e);
 		}
 	}
-	
-	 /**
-	   * Create a socket for a write pipeline
-	   * @param first the first datanode 
-	   * @param length the pipeline length
-	   * @param client client
-	   * @return the socket connected to the first datanode
-	   */
-	  static Socket createSocketForPipeline(final DatanodeInfo first,
-	      final int length, final DFSClient client) throws IOException {
-	    final String dnAddr = first.getXferAddr(
-	        client.getConf().isConnectToDnViaHostname());
-	    if (DFSClient.LOG.isDebugEnabled()) {
-	      DFSClient.LOG.debug("Connecting to datanode " + dnAddr);
-	    }
-	    final InetSocketAddress isa = NetUtils.createSocketAddr(dnAddr);
-	    final Socket sock = client.socketFactory.createSocket();
-	    final int timeout = client.getDatanodeReadTimeout(length);
-	    NetUtils.connect(sock, isa, client.getRandomLocalInterfaceAddr(), client.getConf().getSocketTimeout());
-	    sock.setSoTimeout(timeout);
-	    sock.setSendBufferSize(HdfsConstants.DEFAULT_DATA_SOCKET_SIZE);
-	    if(DFSClient.LOG.isDebugEnabled()) {
-	      DFSClient.LOG.debug("Send buf size " + sock.getSendBufferSize());
-	    }
-	    return sock;
-	  }
-	
+
+	/**
+	 * Create a socket for a write pipeline
+	 * 
+	 * @param first
+	 *            the first datanode
+	 * @param length
+	 *            the pipeline length
+	 * @param client
+	 *            client
+	 * @return the socket connected to the first datanode
+	 */
+	static Socket createSocketForPipeline(final DatanodeInfo first, final int length, final DFSClient client) throws IOException {
+		final String dnAddr = first.getXferAddr(client.getConf().isConnectToDnViaHostname());
+		if (DFSClient.LOG.isDebugEnabled()) {
+			DFSClient.LOG.debug("Connecting to datanode " + dnAddr);
+		}
+		final InetSocketAddress isa = NetUtils.createSocketAddr(dnAddr);
+		final Socket sock = client.socketFactory.createSocket();
+		final int timeout = client.getDatanodeReadTimeout(length);
+		NetUtils.connect(sock, isa, client.getRandomLocalInterfaceAddr(), client.getConf().getSocketTimeout());
+		sock.setSoTimeout(timeout);
+		sock.setSendBufferSize(HdfsConstants.DEFAULT_DATA_SOCKET_SIZE);
+		if (DFSClient.LOG.isDebugEnabled()) {
+			DFSClient.LOG.debug("Send buf size " + sock.getSendBufferSize());
+		}
+		return sock;
+	}
+
 	protected void checkClosed() throws IOException {
 		if (closed) {
 			IOException e = lastException.get();
