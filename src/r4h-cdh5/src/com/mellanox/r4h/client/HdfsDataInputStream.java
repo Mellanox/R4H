@@ -35,48 +35,48 @@ import com.mellanox.r4h.DFSInputStream;
 @InterfaceAudience.Public
 @InterfaceStability.Evolving
 public class HdfsDataInputStream extends FSDataInputStream {
-  public HdfsDataInputStream(DFSInputStream in) throws IOException {
-    super(in);
-  }
+	public HdfsDataInputStream(DFSInputStream in) throws IOException {
+		super(in);
+	}
 
-  /**
-   * Get the datanode from which the stream is currently reading.
-   */
-  public DatanodeInfo getCurrentDatanode() {
-    return ((DFSInputStream) in).getCurrentDatanode();
-  }
+	/**
+	 * Get the datanode from which the stream is currently reading.
+	 */
+	public DatanodeInfo getCurrentDatanode() {
+		return ((DFSInputStream) in).getCurrentDatanode();
+	}
 
-  /**
-   * Get the block containing the target position.
-   */
-  public ExtendedBlock getCurrentBlock() {
-    return ((DFSInputStream) in).getCurrentBlock();
-  }
+	/**
+	 * Get the block containing the target position.
+	 */
+	public ExtendedBlock getCurrentBlock() {
+		return ((DFSInputStream) in).getCurrentBlock();
+	}
 
-  /**
-   * Get the collection of blocks that has already been located.
-   */
-  public synchronized List<LocatedBlock> getAllBlocks() throws IOException {
-    return ((DFSInputStream) in).getAllBlocks();
-  }
+	/**
+	 * Get the collection of blocks that has already been located.
+	 */
+	public synchronized List<LocatedBlock> getAllBlocks() throws IOException {
+		return ((DFSInputStream) in).getAllBlocks();
+	}
 
-  /**
-   * Get the visible length of the file. It will include the length of the last
-   * block even if that is in UnderConstruction state.
-   * 
-   * @return The visible length of the file.
-   */
-  public long getVisibleLength() throws IOException {
-    return ((DFSInputStream) in).getFileLength();
-  }
+	/**
+	 * Get the visible length of the file. It will include the length of the last
+	 * block even if that is in UnderConstruction state.
+	 * 
+	 * @return The visible length of the file.
+	 */
+	public long getVisibleLength() throws IOException {
+		return ((DFSInputStream) in).getFileLength();
+	}
 
-  /**
-   * Get statistics about the reads which this DFSInputStream has done.
-   * Note that because HdfsDataInputStream is buffered, these stats may
-   * be higher than you would expect just by adding up the number of
-   * bytes read through HdfsDataInputStream.
-   */
-  public synchronized DFSInputStream.ReadStatistics getReadStatistics() {
-    return ((DFSInputStream) in).getReadStatistics();
-  }
+	/**
+	 * Get statistics about the reads which this DFSInputStream has done.
+	 * Note that because HdfsDataInputStream is buffered, these stats may
+	 * be higher than you would expect just by adding up the number of
+	 * bytes read through HdfsDataInputStream.
+	 */
+	public synchronized DFSInputStream.ReadStatistics getReadStatistics() {
+		return ((DFSInputStream) in).getReadStatistics();
+	}
 }
