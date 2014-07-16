@@ -30,6 +30,8 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
+import java.util.LinkedList;
+import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -85,7 +87,6 @@ class DataXceiver extends Receiver {
 	private DataNodeBridge dnBridge;
 	private WriteOprHeader oprHeader;
 	public BlockReceiverBridge blockReceiver;
-	private Msg firstMsg;
 	private DataXceiverServer dxcs;
 	private EventQueueHandler eqh;
 	private ServerSession serverSession;
@@ -93,11 +94,15 @@ class DataXceiver extends Receiver {
 	private ExecutorService packetAsyncIOExecutor;
 	private String uri;
 	private ServerPortalWorker serverPortalWorker;
+	private List<Msg> onFlightMsgs = new LinkedList<Msg>();
+	private long clientOnFlightNumMsgs = 0;
+	private boolean isServerSessionClosed = false;
 	public boolean clientSessionCloseEventExpected = true;
 
 	class SSCallbacks implements ServerSession.Callbacks {
 		@Override
 		public void onRequest(Msg msg) {
+			onFlightMsgs.add(msg);
 			currMsg = msg;
 			if (LOG.isTraceEnabled()) {
 				LOG.trace("got request message");
@@ -115,7 +120,8 @@ class DataXceiver extends Receiver {
 
 			} catch (Throwable t) {
 				LOG.error("DataXceiver exception during processing request.", t);
-				if (DataXceiver.this.serverSession != null) {
+
+				if ((DataXceiver.this.serverSession != null) && (!DataXceiver.this.serverSession.getIsClosing())) {
 					DataXceiver.this.serverSession.close();
 				}
 			}
@@ -124,8 +130,9 @@ class DataXceiver extends Receiver {
 		@Override
 		public boolean onMsgError(Msg msg, EventReason reason) {
 			boolean releaseMsg = true; // Always return the message to server's bound pool
-			LOG.error(String.format("Msg error: reason=%s ss=%s ss.isClosing=%s cs.isClosing=%s", reason, serverSession,
+			LOG.error(String.format("Msg error: MSG=%s reason=%s ss=%s ss.isClosing=%s cs.isClosing=%s", msg, reason, serverSession,
 			        serverSession.getIsClosing(), (clientSession != null) ? clientSession.getIsClosing() : null));
+			onFlightMsgs.remove(msg);
 			// TODO: sendReply(NACK) ? or ss.close() ?
 			return releaseMsg;
 		}
@@ -136,31 +143,55 @@ class DataXceiver extends Receiver {
 			String logmsg = String.format("Server Session event: event=%s reason=%s ss=%s uri=%s", session_event, reason, serverSession, uri);
 			switch (session_event) {
 				case SESSION_CLOSED:
-					// TODO: if last packet received then info , else error
-					LOG.info(logmsg);
-					dxcs.onSessionClosed(serverSession);
+					if (onFlightMsgs.size() == 0) {
+						LOG.info(logmsg);
+					} else {
+						LOG.error(logmsg);
+					}
 					break;
 				case SESSION_ERROR:
 				case SESSION_REJECT:
 					LOG.error(logmsg);
-					dxcs.onSessionClosed(serverSession);
 					break;
 				default:
 					break;
 			}
-		}
 
+			// Assuming no other kinds of event for SS except CLOSED,ERROR and REJECT
+			isServerSessionClosed = true;
+			if ((clientSession != null) && (!clientSession.getIsClosing())) {
+				clientSessionCloseEventExpected = true;
+				clientSession.close();
+			}
+
+			if (clientOnFlightNumMsgs == 0) {
+				if (onFlightMsgs.size() > 0) {
+					LOG.warn(String.format("Discarding %d messages for server seesion %s", onFlightMsgs.size(), serverSession));
+					for (Msg m : onFlightMsgs) {
+						serverSession.discardRequest(m);
+						if (LOG.isDebugEnabled()) {
+							LOG.debug("Discarding MSG: " + m);
+						}
+					}
+					onFlightMsgs.clear();
+				}
+				dxcs.returnServerWorkerToPool(serverSession);
+			} else {
+				LOG.warn("Server session closed but there are still messages on flight for proxy client - waiting for client close event to discard messages and return ServerWorker to pool");
+			}
+
+		}
 	}
 
 	class CSCallbacks implements ClientSession.Callbacks {
 		@Override
 		public void onResponse(Msg msg) {
+			clientOnFlightNumMsgs--;
 			if (LOG.isTraceEnabled()) {
 				LOG.trace("Got reply from pipeline client - " + clientSession);
 			}
 			try {
 				if (isFirstReply) {
-					firstMsg = msg;
 					LOG.info("Going to process pipeline reply for OPR header. uri=" + DataXceiver.this.uri);
 					processOPRHeaderReply(msg);
 				} else {
@@ -195,19 +226,18 @@ class DataXceiver extends Receiver {
 		@Override
 		public void onMsgError(Msg msg, EventReason reason) {
 			LOG.error(String.format("Mirror client got msg error:  reason=%s ss=%s sc=%s", reason, serverSession, clientSession));
-
-			if (serverSession != null) {
+			if ((serverSession != null) && (!serverSession.getIsClosing())) {
 				serverSession.close();
 			}
-
 		}
 
 		@Override
 		public void onSessionEvent(EventName session_event, EventReason reason) {
-			String logmsg = String.format("Client Session event: event=%s reason=%s ss=%s", session_event, reason, serverSession);
+			String logmsg = String.format("Client Session event: event=%s reason=%s ss=%s clientOnFlight=%d", session_event, reason, serverSession,
+			        clientOnFlightNumMsgs);
 			switch (session_event) {
 				case SESSION_CLOSED:
-					if (DataXceiver.this.clientSessionCloseEventExpected) {
+					if ((DataXceiver.this.clientSessionCloseEventExpected) && (clientOnFlightNumMsgs == 0)) {
 						LOG.info(logmsg);
 						clientSessionCloseEventExpected = false;
 					} else {
@@ -218,11 +248,25 @@ class DataXceiver extends Receiver {
 				case SESSION_REJECT:
 					LOG.error(logmsg);
 					LOG.error("Closing server session due to error event: ss=" + serverSession);
-					serverSession.close();
+					if ((serverSession != null) && (!serverSession.getIsClosing())) {
+						serverSession.close();
+					}
 					break;
 				default:
 					break;
-
+			}
+			if (isServerSessionClosed) {
+				LOG.warn("Client session closed after server session was closed");
+				if (clientOnFlightNumMsgs > 0) {
+					LOG.warn(String.format("Clinet session closed while still mirror messages on flight. Discarding %d messages ...",
+					        onFlightMsgs.size()));
+				}
+				for (Msg m : onFlightMsgs) {
+					serverSession.discardRequest(m);
+				}
+				onFlightMsgs.clear();
+				clientOnFlightNumMsgs = 0;
+				dxcs.returnServerWorkerToPool(serverSession);
 			}
 		}
 
@@ -468,7 +512,7 @@ class DataXceiver extends Receiver {
 			LOG.warn("Cannot reply response while handling packet processing exception because pkt header is NULL");
 		}
 
-		if (DataXceiver.this.clientSession != null) {
+		if ((DataXceiver.this.clientSession != null) && (!DataXceiver.this.clientSession.getIsClosing())){
 			clientSessionCloseEventExpected = true;
 			DataXceiver.this.clientSession.close();
 		}
@@ -516,7 +560,7 @@ class DataXceiver extends Receiver {
 		} catch (Throwable e) {
 			LOG.error("Failed during processing packet reply: " + blockReceiver.getBlock() + " " + oprHeader.getNumTargets() + " Exception "
 			        + StringUtils.stringifyException(e));
-			if (clientSession != null) {
+			if ((clientSession != null) && (!clientSession.getIsClosing())) {
 				asyncCloseClientSession();
 			}
 		} finally {
@@ -562,6 +606,7 @@ class DataXceiver extends Receiver {
 		mirror.getOut().position(mirror.getOut().limit());
 		mirror.setUserContext(context);
 		clientSession.sendRequest(mirror);
+		clientOnFlightNumMsgs++;
 	}
 
 	private void openPipelineConnection() throws URISyntaxException {
@@ -582,6 +627,7 @@ class DataXceiver extends Receiver {
 		        oprHeader.getSrcDataNode(), oprHeader.getStage(), oprHeader.getPipelineSize(), oprHeader.getMinBytesRcvd(),
 		        oprHeader.getMaxBytesRcvd(), oprHeader.getLatestGenerationStamp(), oprHeader.getRequestedChecksum(), oprHeader.getCachingStrategy());
 		mirrorOut.flush();
+		clientOnFlightNumMsgs++;
 		clientSession.sendRequest(mirror);
 	}
 
@@ -604,6 +650,7 @@ class DataXceiver extends Receiver {
 		replyOut.flush();
 		LOG.info("sending response for src: " + uri);
 		serverSession.sendResponse(msg);
+		onFlightMsgs.remove(msg);
 	}
 
 	private void replyPacketAck(Msg msg, PipelineAck replyAck, boolean async) throws IOException {
@@ -615,28 +662,27 @@ class DataXceiver extends Receiver {
 			if (LOG.isDebugEnabled()) {
 				LOG.debug("queue ack reply for async response : " + replyAck + "\nuri=" + uri);
 			}
-			this.serverPortalWorker.queueAsyncReply(serverSession, msg);
+			this.serverPortalWorker.queueAsyncReply(serverSession, msg, onFlightMsgs);
 		} else {
 			if (LOG.isDebugEnabled()) {
 				LOG.debug("send ack response  : " + replyAck + "\nuri=" + uri);
 			}
 
 			serverSession.sendResponse(msg);
-			// // if (LOG.isDebugEnabled()) {
-			// // LOG.debug("replyAck=" + replyAck);
-			// // }
+			onFlightMsgs.remove(msg);
 		}
 	}
 
 	private void replyHeaderPipelineAck(Msg msg, Status mirrorInStatus, String firstBadLink) throws IOException {
 		if (LOG.isDebugEnabled() || mirrorInStatus != SUCCESS) {
-			LOG.info("Datanode " + oprHeader.getTargets().length + " forwarding connect ack to upstream firstbadlink is " + firstBadLink + "\nuri=" + uri);
+			LOG.info("Datanode " + oprHeader.getTargets().length + " forwarding connect ack to upstream firstbadlink is " + firstBadLink + "\nuri="
+			        + uri);
 		}
 		msg.getOut().clear();
 		BlockOpResponseProto protobuff = BlockOpResponseProto.newBuilder().setStatus(mirrorInStatus).setFirstBadLink(firstBadLink).build();
 		protobuff.writeDelimitedTo(new ByteBufferOutputStream(msg.getOut()));
 		serverSession.sendResponse(msg);
-		
+		onFlightMsgs.remove(msg);
 	}
 
 	ServerSession getSessionServer() {
@@ -644,13 +690,13 @@ class DataXceiver extends Receiver {
 	}
 
 	void close() {
-		if (DataXceiver.this.clientSession != null) {
+		if ((DataXceiver.this.clientSession != null) && (!DataXceiver.this.clientSession.getIsClosing()) ) {
 			clientSessionCloseEventExpected = true;
 			DataXceiver.this.clientSession.close();
 		}
 
-		if (DataXceiver.this.serverSession != null) {
-			DataXceiver.this.serverSession.close();
+		if ((serverSession != null) && (!serverSession.getIsClosing())) {
+			serverSession.close();
 		}
 		// TODO: remove it from DXCServer's dxcList!
 	}
@@ -666,29 +712,16 @@ class DataXceiver extends Receiver {
 	}
 
 	@Override
-	public void readBlock(final ExtendedBlock block,
-		      final Token<BlockTokenIdentifier> blockToken,
-		      final String clientName,
-		      final long blockOffset,
-		      final long length,
-		      final boolean sendChecksum,
-		      final CachingStrategy cachingStrategy) throws IOException {
+	public void readBlock(final ExtendedBlock block, final Token<BlockTokenIdentifier> blockToken, final String clientName, final long blockOffset,
+	        final long length, final boolean sendChecksum, final CachingStrategy cachingStrategy) throws IOException {
 		// TODO Auto-generated method stub
 	}
 
 	@Override
-	  public void writeBlock(final ExtendedBlock block,
-		      final Token<BlockTokenIdentifier> blockToken,
-		      final String clientname,
-		      final DatanodeInfo[] targets,
-		      final DatanodeInfo srcDataNode,
-		      final BlockConstructionStage stage,
-		      final int pipelineSize,
-		      final long minBytesRcvd,
-		      final long maxBytesRcvd,
-		      final long latestGenerationStamp,
-		      DataChecksum requestedChecksum,
-		      CachingStrategy cachingStrategy) throws IOException {
+	public void writeBlock(final ExtendedBlock block, final Token<BlockTokenIdentifier> blockToken, final String clientname,
+	        final DatanodeInfo[] targets, final DatanodeInfo srcDataNode, final BlockConstructionStage stage, final int pipelineSize,
+	        final long minBytesRcvd, final long maxBytesRcvd, final long latestGenerationStamp, DataChecksum requestedChecksum,
+	        CachingStrategy cachingStrategy) throws IOException {
 		oprHeader = new WriteOprHeader(block, blockToken, clientname, targets, srcDataNode, stage, pipelineSize, minBytesRcvd, maxBytesRcvd,
 		        latestGenerationStamp, requestedChecksum, cachingStrategy);
 	}
@@ -733,13 +766,11 @@ class DataXceiver extends Receiver {
 	}
 
 	@Override
-	  public void requestShortCircuitFds(final ExtendedBlock blk,
-		      final Token<BlockTokenIdentifier> token,
-		      SlotId slotId, int maxVersion) throws IOException {
+	public void requestShortCircuitFds(final ExtendedBlock blk, final Token<BlockTokenIdentifier> token, SlotId slotId, int maxVersion)
+	        throws IOException {
 		// TODO Auto-generated method stub
 
 	}
-
 
 	@Override
 	public void replaceBlock(ExtendedBlock blk, Token<BlockTokenIdentifier> blockToken, String delHint, DatanodeInfo source) throws IOException {
@@ -776,7 +807,7 @@ class DataXceiver extends Receiver {
 
 			@Override
 			public void run() {
-				if (DataXceiver.this.serverSession != null) {
+				if ((DataXceiver.this.serverSession != null) && (!DataXceiver.this.serverSession.getIsClosing())) {
 					DataXceiver.this.serverSession.close();
 				}
 			}
@@ -799,18 +830,18 @@ class DataXceiver extends Receiver {
 
 	public String getUri() {
 		return this.uri;
-    }
+	}
 
 	@Override
-    public void releaseShortCircuitFds(SlotId arg0) throws IOException {
-	    // TODO Auto-generated method stub
-	    
-    }
+	public void releaseShortCircuitFds(SlotId arg0) throws IOException {
+		// TODO Auto-generated method stub
+
+	}
 
 	@Override
-    public void requestShortCircuitShm(String arg0) throws IOException {
-	    // TODO Auto-generated method stub
-	    
-    }
+	public void requestShortCircuitShm(String arg0) throws IOException {
+		// TODO Auto-generated method stub
+
+	}
 
 }

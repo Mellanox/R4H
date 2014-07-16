@@ -21,10 +21,13 @@ import java.io.IOException;
 import java.net.URI;
 import java.nio.ByteBuffer;
 import java.util.LinkedList;
+import java.util.List;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.hadoop.io.Stringifier;
+import org.apache.hadoop.util.StringUtils;
 
 import com.mellanox.jxio.EventQueueHandler;
 import com.mellanox.jxio.Msg;
@@ -47,7 +50,8 @@ public class ServerPortalWorker {
 
 		@Override
 		public MsgPool getAdditionalMsgPool(int inSize, int outSize) {
-			LOG.warn("Potential resources leak - JXIO is missing msg resources, allocating additional buffers. SP=" + ServerPortalWorker.this.sp + "\n");
+			LOG.warn("Potential resources leak - JXIO is missing msg resources, allocating additional buffers. SP=" + ServerPortalWorker.this.sp
+			        + "\n");
 			return allocateBuffers();
 		}
 	};
@@ -62,15 +66,22 @@ public class ServerPortalWorker {
 	private class AsyncReply implements Runnable {
 		final ServerSession session;
 		final Msg msg;
+		final List<Msg> onFlightMsgs;
 
-		AsyncReply(ServerSession ss, Msg msg) {
+		AsyncReply(ServerSession ss, Msg msg, List<Msg> onFlightMsgs) {
 			this.session = ss;
 			this.msg = msg;
+			this.onFlightMsgs = onFlightMsgs;
 		}
 
 		@Override
 		public void run() {
-			session.sendResponse(msg);
+			if (!session.getIsClosing()) {
+				session.sendResponse(msg);
+				if (onFlightMsgs != null) { // Compatibility for CDH44 - no aligned with JXIO discard api yet
+					onFlightMsgs.remove(msg);
+				}
+			}
 		}
 	}
 
@@ -80,15 +91,15 @@ public class ServerPortalWorker {
 		this.numOfMsgsToBind = numOfMsgsToBind;
 		this.eqh = new R4HEventHandler(onDynamicMsgPoolAllocation, onEqhBreak);
 
-		MsgPool msgPool = allocateBuffers();
-		this.eqh.bindMsgPool(msgPool);
-
 		this.sp = new ServerPortal(eqh, uri);
 		this.th = new Thread(eqh);
+		MsgPool msgPool = allocateBuffers();
+		this.eqh.bindMsgPool(msgPool);
 	}
 
 	MsgPool allocateBuffers() {
-		LOG.info(String.format("%s : Allocating %d messages (in=%dB, out=%sB) and addiotnal %dX%dB buffers for async IO", this.sp,numOfMsgsToBind, msgInSize, msgOutSize, numOfMsgsToBind, msgInSize));
+		LOG.info(String.format("%s: Allocating %d messages (in=%dB, out=%sB) and addiotnal %d buffers X %dB for async IO", sp, numOfMsgsToBind,
+		        msgInSize, msgOutSize, numOfMsgsToBind, msgInSize));
 		MsgPool msgPool = new MsgPool(numOfMsgsToBind, msgInSize, msgOutSize);
 		for (int j = 0; j < numOfMsgsToBind; j++) {
 			ioBufferPool.add(ByteBuffer.allocate(msgInSize));
@@ -122,8 +133,8 @@ public class ServerPortalWorker {
 		}
 	}
 
-	public void queueAsyncReply(ServerSession ss, Msg msg) {
-		asyncOprQueue.add(new AsyncReply(ss, msg));
+	public void queueAsyncReply(ServerSession ss, Msg msg, List<Msg> onFlightMsgs) {
+		asyncOprQueue.add(new AsyncReply(ss, msg, onFlightMsgs));
 		// if (msgReplyQueue.size() >= REPLY_QUEUE_TRESHOLD_FOR_BREAK_EVENT_LOOP) {
 		eqh.breakEventLoop();
 		// }
@@ -132,7 +143,11 @@ public class ServerPortalWorker {
 	void processReplies() {
 		Runnable opr = asyncOprQueue.poll();
 		while (opr != null) {
-			opr.run();
+			try {
+				opr.run();
+			} catch (Throwable t) {
+				LOG.error(StringUtils.stringifyException(t));
+			}
 			opr = asyncOprQueue.poll();
 		}
 	}

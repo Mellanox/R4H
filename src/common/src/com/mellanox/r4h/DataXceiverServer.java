@@ -168,13 +168,12 @@ class DataXceiverServer implements Runnable {
 		}
 	}
 
-	synchronized void onSessionClosed(ServerSession ss) {
+	synchronized void returnServerWorkerToPool(ServerSession ss) {
 		if (sessionToWorkerHashtable.containsKey(ss)) {
 			ServerPortalWorker spw = sessionToWorkerHashtable.get(ss);
 			sessionToWorkerHashtable.remove(ss);
 			spPool.add(spw);
 		}
-
 	}
 
 }

@@ -136,12 +136,12 @@ class DataXceiver extends Receiver {
 				case SESSION_CLOSED:
 					// TODO: if last packet received then info , else error
 					LOG.info(logmsg);
-					dxcs.onSessionClosed(serverSession);
+					dxcs.returnServerWorkerToPool(serverSession);
 					break;
 				case SESSION_ERROR:
 				case SESSION_REJECT:
 					LOG.error(logmsg);
-					dxcs.onSessionClosed(serverSession);
+					dxcs.returnServerWorkerToPool(serverSession);
 					break;
 				default:
 					break;
@@ -613,7 +613,7 @@ class DataXceiver extends Receiver {
 			if (LOG.isDebugEnabled()) {
 				LOG.debug("queue ack reply for async response : " + replyAck + "\nuri=" + uri);
 			}
-			this.serverPortalWorker.queueAsyncReply(serverSession, msg);
+			this.serverPortalWorker.queueAsyncReply(serverSession, msg, null);
 		} else {
 			if (LOG.isDebugEnabled()) {
 				LOG.debug("send ack response  : " + replyAck + "\nuri=" + uri);
