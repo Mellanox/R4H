@@ -307,8 +307,8 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory {
 	@VisibleForTesting
 	public DFSClient(URI nameNodeUri, ClientProtocol rpcNamenode, Configuration conf, FileSystem.Statistics stats) throws IOException {
 		// Copy only the required DFSClient configuration
-		this.dfsClientConf = new DFSClientConfBridge(conf);
-		if (this.dfsClientConf.isUseLegacyBlockReaderLocal()) {
+		dfsClientConf = new DFSClientConfBridge(conf);
+		if (dfsClientConf.isUseLegacyBlockReaderLocal()) {
 			LOG.debug("Using legacy short-circuit local reads.");
 		}
 		this.conf = conf;
