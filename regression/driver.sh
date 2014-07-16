@@ -6,7 +6,7 @@ errorHandler()
 {
     local phase="$1"
     message="Error occurred during ${phase} phase."
-    python mailSenderUFA.py "HDFS Regression runtime failure" "$message" "`date`" "$USER" "$MAILING_LIST"
+    python mailSenderUFA.py "HDFS Regression runtime failure" "$message" "$(date)" "$USER" "$MAILING_LIST"
     exit 1
 }
 

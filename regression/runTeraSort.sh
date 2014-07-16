@@ -70,7 +70,7 @@ do
         RANGE=$(echo "$ITERATIONS_R4H" | awk '{ for(i=1;i<=$1;i++) print i;}' | tr '\n' ' ')
         for i in $RANGE
         do
-            echo "@@@@@@@@@@@@@@@@@@@ `date` : (TERASORT) running ${PROGRAM}, job size = ${jobSize}, reducers = $reduceTasks Run number ${i} out of $ITERATIONS_R4H @@@@@@@@@@@@@@@@@@@@@@@@" >> $LONG_LOG
+            echo "@@@@@@@@@@@@@@@@@@@ $(date) : (TERASORT) running ${PROGRAM}, job size = ${jobSize}, reducers = $reduceTasks Run number ${i} out of $ITERATIONS_R4H @@@@@@@@@@@@@@@@@@@@@@@@" >> $LONG_LOG
             runJob $reduceTasks $USE_UFA
         done
         exportResultsToReport
@@ -82,7 +82,7 @@ do
         RANGE=$(echo "$ITERATIONS_VNL" | awk '{ for(i=1;i<=$1;i++) print i;}' | tr '\n' ' ')
         for j in $RANGE
         do
-            echo "@@@@@@@@@@@@@@@@@@@ `date` : (TERASORT) running ${PROGRAM}, job size = ${jobSize}, reducers = $reduceTasks Run number ${j} out of $ITERATIONS_VNL @@@@@@@@@@@@@@@@@@@@@@@@" >> $LONG_LOG
+            echo "@@@@@@@@@@@@@@@@@@@ $(date) : (TERASORT) running ${PROGRAM}, job size = ${jobSize}, reducers = $reduceTasks Run number ${j} out of $ITERATIONS_VNL @@@@@@@@@@@@@@@@@@@@@@@@" >> $LONG_LOG
             runJob $reduceTasks
         done
         exportResultsToReport

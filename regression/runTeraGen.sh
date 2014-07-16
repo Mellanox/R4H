@@ -25,16 +25,16 @@ runJob()
         FAILED_ATTEMPTS=$((FAILED_ATTEMPTS+1))
     else
         HISTORY_FILE=$(${HDFS_EXEC} dfs -ls ${HISTORY_PATH} | grep .jhist | tail -1 | awk '{print $8}')
-        HISTORY=`${MAPRED_EXEC} job -history ${HISTORY_FILE}`
-        START_TIME=`echo "$HISTORY" | grep "Launched At:" | awk '{ print $4 }'`
-        FINISH_TIME=`echo "$HISTORY" | grep "Finished At:" | awk '{ print $4 }'`
-        START_SEC=`date -d "$START_TIME" +%s`
-        FINISH_SEC=`date -d "$FINISH_TIME" +%s`
+        HISTORY=$(${MAPRED_EXEC} job -history ${HISTORY_FILE})
+        START_TIME=$(echo "$HISTORY" | grep "Launched At:" | awk '{ print $4 }')
+        FINISH_TIME=$(echo "$HISTORY" | grep "Finished At:" | awk '{ print $4 }')
+        START_SEC=$(date -d "$START_TIME" +%s)
+        FINISH_SEC=$(date -d "$FINISH_TIME" +%s)
         JOB_TIME=$(($FINISH_SEC-$START_SEC))
         TIMES="$TIMES $JOB_TIME"
         
         # Saves number of both FAILED and KILLED mappers
-        FAILED_KILLED_MAPPERS=`echo "$HISTORY" | grep -A 8 "Task Summary" | grep "Map" | awk '{print $4 + $5}'`
+        FAILED_KILLED_MAPPERS=$(echo "$HISTORY" | grep -A 8 "Task Summary" | grep "Map" | awk '{print $4 + $5}')
         FAILED_ATTEMPTS=$((FAILED_ATTEMPTS+FAILED_KILLED_MAPPERS))
         
     fi
@@ -51,10 +51,10 @@ do
         TIMES=""
         PROGRAM="UFA"
         FAILED_ATTEMPTS=0
-        RANGE=`echo "$ITERATIONS_R4H" | awk '{ for(i=1;i<=$1;i++) print i;}' | tr '\n' ' '`
+        RANGE=$(echo "$ITERATIONS_R4H" | awk '{ for(i=1;i<=$1;i++) print i;}' | tr '\n' ' ')
         for i in $RANGE
         do
-            echo "@@@@@@@@@@@@@@@@@@@ `date` : (TERAGEN) running ${PROGRAM}, job size = ${jobSize}, Run number ${i} out of $ITERATIONS_R4H @@@@@@@@@@@@@@@@@@@@@@@@" >> $LONG_LOG
+            echo "@@@@@@@@@@@@@@@@@@@ $(date) : (TERAGEN) running ${PROGRAM}, job size = ${jobSize}, Run number ${i} out of $ITERATIONS_R4H @@@@@@@@@@@@@@@@@@@@@@@@" >> $LONG_LOG
             runJob $mapTasks $USE_UFA
         done
         exportResultsToReport
@@ -63,10 +63,10 @@ do
         TIMES=""
         PROGRAM="VANILLA"
         FAILED_ATTEMPTS=0
-        RANGE=`echo "$ITERATIONS_VNL" | awk '{ for(i=1;i<=$1;i++) print i;}' | tr '\n' ' '`
+        RANGE=$(echo "$ITERATIONS_VNL" | awk '{ for(i=1;i<=$1;i++) print i;}' | tr '\n' ' ')
         for j in $RANGE
         do
-            echo "@@@@@@@@@@@@@@@@@@@ `date` : (TERAGEN) running ${PROGRAM}, job size = ${jobSize}, Run number ${j} out of $ITERATIONS_VNL @@@@@@@@@@@@@@@@@@@@@@@@" >> $LONG_LOG
+            echo "@@@@@@@@@@@@@@@@@@@ $(date) : (TERAGEN) running ${PROGRAM}, job size = ${jobSize}, Run number ${j} out of $ITERATIONS_VNL @@@@@@@@@@@@@@@@@@@@@@@@" >> $LONG_LOG
             runJob $mapTasks
         done
         exportResultsToReport

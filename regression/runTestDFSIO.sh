@@ -47,14 +47,14 @@ runJob()
 
 runDstat()
 {
-    pdsh -w ${SLAVES} "dstat -c --output ${DSTAT_TMP_PATH}/dstat_\`hostname\`.csv 5 >& /dev/null"&
+    pdsh -w ${SLAVES} "dstat -c --output ${DSTAT_TMP_PATH}/dstat_\$(hostname).csv 5 >& /dev/null"&
     PDSH_PID=$!
 }
 
 killDstat()
 {
     kill -9 ${PDSH_PID}
-    pdsh -w ${SLAVES} "X=\`ps -ef | grep dstat | grep -v grep | awk '{ print \$2 }'\`; if [[ -n \$X ]]; then kill -9 \$X; fi"
+    pdsh -w ${SLAVES} "X=\$(ps -ef | grep dstat | grep -v grep | awk '{ print \$2 }'); if [[ -n \$X ]]; then kill -9 \$X; fi"
 }
 
 reduceDstat()
@@ -88,11 +88,11 @@ do
         SHORT_LOG="${LOG_PATH}short_${nrFiles}_${fileSize}_${PROGRAM}.log"
         FAILED_ATTEMPTS=0
         if [[ "$ITERATIONS_R4H" != "0" ]]; then
-            RANGE=`echo "$ITERATIONS_R4H" | awk '{ for(i=1;i<=$1;i++) print i;}' | tr '\n' ' '`
+            RANGE=$(echo "$ITERATIONS_R4H" | awk '{ for(i=1;i<=$1;i++) print i;}' | tr '\n' ' ')
             
             for i in $RANGE
             do
-                echo "@@@@@@@@@@@@@@@@@@@ `date` : running ${PROGRAM} with ${nrFiles} file of size ${fileSize}MB, Run number ${i} out of $ITERATIONS_R4H @@@@@@@@@@@@@@@@@@@@@@@@" >> $LONG_LOG
+                echo "@@@@@@@@@@@@@@@@@@@ $(date) : running ${PROGRAM} with ${nrFiles} file of size ${fileSize}MB, Run number ${i} out of $ITERATIONS_R4H @@@@@@@@@@@@@@@@@@@@@@@@" >> $LONG_LOG
                 runJob $USE_UFA
             done
             reduceDstat
@@ -105,10 +105,10 @@ do
         FAILED_ATTEMPTS=0
         
         if [[ "$ITERATIONS_VNL" != "0" ]]; then
-            RANGE=`echo "$ITERATIONS_VNL" | awk '{ for(i=1;i<=$1;i++) print i;}' | tr '\n' ' '`
+            RANGE=$(echo "$ITERATIONS_VNL" | awk '{ for(i=1;i<=$1;i++) print i;}' | tr '\n' ' ')
             for j in $RANGE
             do
-                echo "@@@@@@@@@@@@@@@@@@@ `date` : running ${PROGRAM} with ${nrFiles} files of size ${fileSize}MB, Run number ${j} out of $ITERATIONS_VNL @@@@@@@@@@@@@@@@@@@@@@@@" >> $LONG_LOG
+                echo "@@@@@@@@@@@@@@@@@@@ $(date) : running ${PROGRAM} with ${nrFiles} files of size ${fileSize}MB, Run number ${j} out of $ITERATIONS_VNL @@@@@@@@@@@@@@@@@@@@@@@@" >> $LONG_LOG
                 runJob
             done
             reduceDstat
@@ -116,7 +116,7 @@ do
         fi
         
         # Cleaning Phase
-        echo "@@@@@@@@@@@@@@@@@@@ `date` : cleaning TestDFSIO files @@@@@@@@@@@@@@@@@@@@@@@@" >> $LONG_LOG
+        echo "@@@@@@@@@@@@@@@@@@@ $(date) : cleaning TestDFSIO files @@@@@@@@@@@@@@@@@@@@@@@@" >> $LONG_LOG
         ${HADOOP_EXEC} jar $TEST_JAR TestDFSIO -clean >> $LONG_LOG 2>&1	
     done
 done
