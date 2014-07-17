@@ -150,9 +150,6 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable {
 
 	// The client session. A new client session is created per block.
 	private ClientSession clientSession;
-	// Our session callbacks. These replace important functionality that was related to waiting on ackQ etc.
-	// We have only one instance of the callbacks object, and reuse it for all blocks.
-	private CSCallbacks clientSessionCallbacks;
 	// The event queue handler. We have only one such, and reuse it for all blocks.
 	private R4HEventHandler eventQHandler = new R4HEventHandler(null, true);
 	// The name of next DN node we're talking to (we hold it here for logging purposes only).
@@ -206,7 +203,6 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable {
 	private Progressable progress;
 	private final short blockReplication; // replication factor of file
 	private boolean shouldSyncBlock = false; // force blocks to disk upon close
-	public boolean closeEventExpected = false;
 
 	private class Packet {
 		long seqno; // sequencenumber of buffer in block
@@ -386,6 +382,7 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable {
 		private long lastPacketArrived = 0;
 		private long countPacketArrived = 0;
 		private boolean wasSessionEstablished;
+		private boolean closeEventExpected = false;
 
 		@Override
 		/**
@@ -633,7 +630,7 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable {
 			switch (session_event) {
 				case SESSION_CLOSED:
 					String logmsg = String.format("Client Session event=%s, reason=%s", session_event, reason);
-					if (DFSOutputStream.this.closeEventExpected) {
+					if (closeEventExpected) {
 						if (DFSOutputStream.LOG.isDebugEnabled()) {
 							DFSOutputStream.LOG.debug(DFSOutputStream.this.toString() + logmsg);
 						}
@@ -673,9 +670,9 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable {
 			// This will solve the bug when more than one message has error and so the client session is closed more than once.
 			if (clientSession != null) {
 				DFSOutputStream.LOG.error(DFSOutputStream.this.toString() + String.format("Msg error occurred: reason=%s, countPacketArrived=%d", reason, countPacketArrived));
-				closeEventExpected = true;
 				clientSession.close();
 				clientSession = null;
+				closeEventExpected = true;
 			} else if (LOG.isDebugEnabled()) {
 				DFSOutputStream.LOG.debug(DFSOutputStream.this.toString() + String.format("Msg error occurred: reason=%s, countPacketArrived=%d", reason, countPacketArrived));
 			}
@@ -1441,11 +1438,7 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable {
 					long writeTimeout = dfsClient.getDatanodeWriteTimeout(nodes.length);
 
 					DFSOutputStream.this.nextDnName = nodes[0].getName();
-
-					if (DFSOutputStream.this.clientSessionCallbacks == null) {
-						DFSOutputStream.this.clientSessionCallbacks = new CSCallbacks();
-					}
-					
+					CSCallbacks clientSessionCallbacks = new CSCallbacks();
 					String hash = R4HProtocol.createSessionHash();
 					DFSOutputStream.this.name = String.format("[hash=%s] ", hash);
 					
@@ -1469,7 +1462,6 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable {
 					// Close/Clean old session
 					clientSessionCallbacks.wasSessionEstablished = false;
 					clientSessionCallbacks.countPacketArrived = 0;
-					closeEventExpected = false;
 					if (DFSOutputStream.this.clientSession != null) {
     					clientSession.close();
     					clientSession = null;

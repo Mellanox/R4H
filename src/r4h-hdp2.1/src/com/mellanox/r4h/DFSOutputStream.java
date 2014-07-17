@@ -142,11 +142,7 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 	private static long lastOperationTS = 0;
 	private Object lastOperationTSLock = new Object();
 	// The client session. A new client session is created per block.
-	// TODO: change this to have a single client session and a mechanism that will solve the bug of getting a callback from a previous session.
 	private ClientSession clientSession;
-	// Our session callbacks. These replace important functionality that was related to waiting on ackQ etc.
-	// We have only one instance of the callbacks object, and reuse it for all blocks.
-	private CSCallbacks clientSessionCallbacks;
 	// The event queue handler. We have only one such, and reuse it for all blocks.
 	private R4HEventHandler eventQHandler = new R4HEventHandler(null, true);
 	// The name of next DN node we're talking to (we hold it here for logging purposes only).
@@ -168,7 +164,6 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 	private ConcurrentLinkedQueue<Packet> dataQueue = new ConcurrentLinkedQueue<Packet>();
 	private ConcurrentLinkedQueue<Packet> ackQueue = new ConcurrentLinkedQueue<Packet>();
 	private String name; // used as the toString value
-	public boolean closeEventExpected = false;
 	// R4H stuff ends here.
 
 	private final DFSClient dfsClient;
@@ -382,6 +377,7 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 		private long lastPacketArrived = 0;
 		private long countPacketArrived = 0;
 		private boolean wasSessionEstablished;
+		private boolean closeEventExpected = false;
 
 		@Override
 		/**
@@ -637,7 +633,7 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 			switch (session_event) {
 				case SESSION_CLOSED:
 					String logmsg = String.format("Client Session event=%s, reason=%s", session_event, reason);
-					if (DFSOutputStream.this.closeEventExpected) {
+					if (closeEventExpected) {
 						if (DFSOutputStream.LOG.isDebugEnabled()) {
 							DFSOutputStream.LOG.debug(DFSOutputStream.this.toString() + logmsg);
 						}
@@ -679,9 +675,9 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 			if (clientSession != null) {
 				DFSOutputStream.LOG.error(DFSOutputStream.this.toString()
 				        + String.format("Msg error occurred: reason=%s, countPacketArrived=%d", reason, countPacketArrived));
-				closeEventExpected = true;
 				clientSession.close();
 				clientSession = null;
+				closeEventExpected = true;
 			} else if (LOG.isDebugEnabled()) {
 				DFSOutputStream.LOG.debug(DFSOutputStream.this.toString()
 				        + String.format("Msg error occurred: reason=%s, countPacketArrived=%d", reason, countPacketArrived));
@@ -1569,11 +1565,7 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 					long writeTimeout = dfsClient.getDatanodeWriteTimeout(nodes.length);
 
 					DFSOutputStream.this.nextDnName = nodes[0].getName();
-
-					if (DFSOutputStream.this.clientSessionCallbacks == null) {
-						DFSOutputStream.this.clientSessionCallbacks = new CSCallbacks();
-					}
-
+					CSCallbacks clientSessionCallbacks = new CSCallbacks();
 					String hash = R4HProtocol.createSessionHash();
 					DFSOutputStream.this.name = String.format("[hash=%s] ", hash);
 
@@ -1597,7 +1589,6 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 					// Close/Clean old session
 					clientSessionCallbacks.wasSessionEstablished = false;
 					clientSessionCallbacks.countPacketArrived = 0;
-					closeEventExpected = false;
 					if (DFSOutputStream.this.clientSession != null) {
 						clientSession.close();
 						clientSession = null;
