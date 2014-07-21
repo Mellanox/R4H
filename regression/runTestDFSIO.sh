@@ -28,7 +28,7 @@ exportResultsToReport()
 runJob()
 {
     local USE=$1
-    HISTORY_PATH=$(echo /user/history/done/$(date +%Y)/$(date +%m)/$(date +%d)/000000)
+    HISTORY_PATH=$(echo ${HISTORY_ROOT}/done/$(date +%Y)/$(date +%m)/$(date +%d)/000000)
     runDstat
     ${HADOOP_EXEC} jar $TEST_JAR TestDFSIO -Ddfs.replication=${DFS_REPLICATION} ${USE} -write -nrFiles ${nrFiles} -fileSize ${fileSize}MB -resFile $SHORT_LOG >> $LONG_LOG 2>&1
     succ=$?
@@ -77,7 +77,7 @@ reduceDstat()
 echo "program,numOfFiles,fileSize,min time,max time,avg time,min TP,max TP,avg TP,failed attempts,avg cpu" >> ${DFS_SHEET_CSV_PATH}
 
 echo "Changing hdfs /user permissions to 777..." | tee -a $LONG_LOG
-sudo -u hdfs ${HDFS_EXEC} dfs -chmod -R 777 /user
+sudo -u hdfs ${HDFS_EXEC} dfs -chmod -R 777 /
 
 for fileSize in $fileSizeSet
 do 

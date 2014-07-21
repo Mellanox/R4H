@@ -42,6 +42,10 @@ message="<font size=6 color=blue><b>Daily R4H Regression Report</b></font><br><b
 R4H_VERSION=$(unzip -q -c "$R4H_JAR_PATH" META-INF/MANIFEST.MF | grep "Implementation-Version" | awk '{ print $2 }')
 JXIO_VERSION=$(unzip -q -c "$JXIO_JAR_PATH" META-INF/MANIFEST.MF | egrep "Implementation-Version|Specification-Version" | awk '{ print $2 }')
 
+if [[ -n "$CLUSTER" ]]; then
+    message="$message <b>Cluster:</b> ${CLUSTER}<br>"
+fi
+
 if [[ -n "$R4H_VERSION" ]]; then
     message="$message <b>R4H Version:</b> ${R4H_VERSION}<br>"
 fi

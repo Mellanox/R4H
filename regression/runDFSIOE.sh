@@ -31,7 +31,7 @@ exportResultsToReport()
 runJob()
 {
     local USE=$1
-    HISTORY_PATH=$(echo /user/history/done/$(date +%Y)/$(date +%m)/$(date +%d)/000000)
+    HISTORY_PATH=$(echo ${HISTORY_ROOT}/done/$(date +%Y)/$(date +%m)/$(date +%d)/000000)
     ${HADOOP_EXEC} jar $DATATOOLS_JAR org.apache.hadoop.fs.dfsioe.TestDFSIOEnh -bufferSize 4096 -plotInteval 1000 -sampleUnit m -sampleInteval 200 -sumThreshold 0.5 -Ddfs.replication=${DFS_REPLICATION} ${USE} -write -nrFiles ${nrFiles} -fileSize ${fileSize} -resFile $SHORT_LOG >> $LONG_LOG 2>&1
     if (($? != 0)); then
         FAILED_ATTEMPTS=$((FAILED_ATTEMPTS+1))

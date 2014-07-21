@@ -34,7 +34,7 @@ runJob()
     local USE=$2
     echo "Cleaning ${TERASORT_PATH}"
     ${HDFS_EXEC} dfs -rm -r ${TERASORT_PATH}
-    HISTORY_PATH=$(echo /user/history/done/$(date +%Y)/$(date +%m)/$(date +%d)/000000)
+    HISTORY_PATH=$(echo ${HISTORY_ROOT}/done/$(date +%Y)/$(date +%m)/$(date +%d)/000000)
     echo "Executing: ${HADOOP_EXEC} jar $EXAMPLES_JAR terasort ${USE} -Dmapred.reduce.tasks=${REDUCERS} ${TERAGEN_PATH} ${TERASORT_PATH}"
     ${HADOOP_EXEC} jar $EXAMPLES_JAR terasort ${USE} -Ddfs.replication=${DFS_REPLICATION} -Dmapred.reduce.tasks=${REDUCERS} ${TERAGEN_PATH} ${TERASORT_PATH} >> $LONG_LOG 2>&1
     if (($? != 0)); then

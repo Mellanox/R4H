@@ -1,5 +1,16 @@
 #!/bin/bash
 
+if [[ "$CLUSTER" == "CDH" ]]; then
+	echo "*** Using CDH cluster ***"
+	source defaultsCDH.sh
+elif [[ "$CLUSTER" == "HDP" ]]; then
+	echo "*** Using HDP cluster ***"
+	source defaultsHDP.sh
+else
+	echo "You must export CLUSTER. Use export CLUSTER=CDH or CLUSTER=HDP."
+        exit 1
+fi
+
 source defaults.sh
 
 errorHandler()
@@ -15,14 +26,16 @@ restartCluster()
     ${HDFS_EXEC} dfs -rm -r "/*"
     ${HDFS_EXEC} dfs -expunge
     
-    python cmHandler.py "stop"
-    if (($? != 0)); then
-        errorHandler "cluster restart"
-    fi
+    if [[ "$CLUSTER" == "CDH" ]]; then
+	    python cmHandler.py "stop"
+	    if (($? != 0)); then
+	        errorHandler "cluster restart"
+	    fi
 
-    python cmHandler.py "start"
-    if (($? != 0)); then
-        errorHandler "cluster restart"
+	    python cmHandler.py "start"
+	    if (($? != 0)); then
+	        errorHandler "cluster restart"
+	    fi
     fi
 }
 
