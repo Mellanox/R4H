@@ -144,7 +144,7 @@ class DataXceiver extends Receiver {
 			switch (session_event) {
 				case SESSION_CLOSED:
 					if (onFlightMsgs.size() == 0) {
-					LOG.info(logmsg);
+						LOG.info(logmsg);
 					} else {
 						LOG.error(logmsg);
 					}
@@ -162,7 +162,7 @@ class DataXceiver extends Receiver {
 			if ((clientSession != null) && (!clientSession.getIsClosing())) {
 				clientSessionCloseEventExpected = true;
 				clientSession.close();
-		}
+			}
 
 			if (clientOnFlightNumMsgs == 0) {
 				if (onFlightMsgs.size() > 0) {
@@ -249,7 +249,7 @@ class DataXceiver extends Receiver {
 					LOG.error(logmsg);
 					LOG.error("Closing server session due to error event: ss=" + serverSession);
 					if ((serverSession != null) && (!serverSession.getIsClosing())) {
-					serverSession.close();
+						serverSession.close();
 					}
 					break;
 				default:
@@ -512,7 +512,7 @@ class DataXceiver extends Receiver {
 			LOG.warn("Cannot reply response while handling packet processing exception because pkt header is NULL");
 		}
 
-		if ((DataXceiver.this.clientSession != null) && (!DataXceiver.this.clientSession.getIsClosing())){
+		if ((DataXceiver.this.clientSession != null) && (!DataXceiver.this.clientSession.getIsClosing())) {
 			clientSessionCloseEventExpected = true;
 			DataXceiver.this.clientSession.close();
 		}
@@ -690,7 +690,7 @@ class DataXceiver extends Receiver {
 	}
 
 	void close() {
-		if ((DataXceiver.this.clientSession != null) && (!DataXceiver.this.clientSession.getIsClosing()) ) {
+		if ((DataXceiver.this.clientSession != null) && (!DataXceiver.this.clientSession.getIsClosing())) {
 			clientSessionCloseEventExpected = true;
 			DataXceiver.this.clientSession.close();
 		}
@@ -721,7 +721,7 @@ class DataXceiver extends Receiver {
 	public void writeBlock(final ExtendedBlock block, final Token<BlockTokenIdentifier> blockToken, final String clientname,
 	        final DatanodeInfo[] targets, final DatanodeInfo srcDataNode, final BlockConstructionStage stage, final int pipelineSize,
 	        final long minBytesRcvd, final long maxBytesRcvd, final long latestGenerationStamp, DataChecksum requestedChecksum,
-		      CachingStrategy cachingStrategy) throws IOException {
+	        CachingStrategy cachingStrategy) throws IOException {
 		oprHeader = new WriteOprHeader(block, blockToken, clientname, targets, srcDataNode, stage, pipelineSize, minBytesRcvd, maxBytesRcvd,
 		        latestGenerationStamp, requestedChecksum, cachingStrategy);
 	}
@@ -830,18 +830,18 @@ class DataXceiver extends Receiver {
 
 	public String getUri() {
 		return this.uri;
-    }
+	}
 
 	@Override
-    public void releaseShortCircuitFds(SlotId arg0) throws IOException {
-	    // TODO Auto-generated method stub
-	    
-    }
+	public void releaseShortCircuitFds(SlotId arg0) throws IOException {
+		// TODO Auto-generated method stub
+
+	}
 
 	@Override
-    public void requestShortCircuitShm(String arg0) throws IOException {
-	    // TODO Auto-generated method stub
-	    
-    }
+	public void requestShortCircuitShm(String arg0) throws IOException {
+		// TODO Auto-generated method stub
+
+	}
 
 }
