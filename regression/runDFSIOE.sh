@@ -36,7 +36,8 @@ runJob()
     if (($? != 0)); then
         FAILED_ATTEMPTS=$((FAILED_ATTEMPTS+1))
     else
-        HISTORY_FILE=$(${HDFS_EXEC} dfs -ls ${HISTORY_PATH} | grep .jhist | tail -1 | awk '{print $8}')
+        sleep 15 # wait for history file
+	HISTORY_FILE=$(${HDFS_EXEC} dfs -ls ${HISTORY_PATH} | grep .jhist | tail -1 | awk '{print $8}')
         FAILED_KILLED_MAPPERS=$(${MAPRED_EXEC} job -history ${HISTORY_FILE} | grep -A 8 "Task Summary" | grep "Map" | awk '{print $4 + $5}')
         FAILED_ATTEMPTS=$((FAILED_ATTEMPTS+FAILED_KILLED_MAPPERS))
     fi
@@ -62,8 +63,9 @@ do
             echo "@@@@@@@@@@@@@@@@@@@ $(date) : running ${PROGRAM} with ${nrFiles} file of size ${fileSize}MB, Run number ${i} out of $ITERATIONS_R4H @@@@@@@@@@@@@@@@@@@@@@@@" >> $LONG_LOG
             runJob $USE_UFA
         done
-        exportResultsToReport
-        
+        if [[ "$ITERATIONS_R4H" != "0" ]]; then
+                exportResultsToReport
+        fi 
         # Vanilla Phase
         PROGRAM="VANILLA"
         SHORT_LOG="${LOG_PATH}dfsioe_short_${nrFiles}_${fileSize}_${PROGRAM}.log"
@@ -74,8 +76,9 @@ do
             echo "@@@@@@@@@@@@@@@@@@@ $(date) : running ${PROGRAM} with ${nrFiles} files of size ${fileSize}MB, Run number ${j} out of $ITERATIONS_VNL @@@@@@@@@@@@@@@@@@@@@@@@" >> $LONG_LOG
             runJob
         done
-        exportResultsToReport
-
+	if [[ "$ITERATIONS_VNL" != "0" ]]; then
+                exportResultsToReport
+        fi
         # Cleaning Phase
         echo "@@@@@@@@@@@@@@@@@@@ $(date) : cleaning DFSIOEnh files @@@@@@@@@@@@@@@@@@@@@@@@" >> $LONG_LOG
         ${HADOOP_EXEC} jar $DATATOOLS_JAR org.apache.hadoop.fs.dfsioe.TestDFSIOEnh -clean >> $LONG_LOG 2>&1	

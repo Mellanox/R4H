@@ -33,7 +33,7 @@ runJob()
     ${HADOOP_EXEC} jar $TEST_JAR TestDFSIO -Ddfs.replication=${DFS_REPLICATION} ${USE} -write -nrFiles ${nrFiles} -fileSize ${fileSize}MB -resFile $SHORT_LOG >> $LONG_LOG 2>&1
     succ=$?
     killDstat
-    
+    sleep 15 # wait for history file    
     HISTORY_FILE=$(${HDFS_EXEC} dfs -ls ${HISTORY_PATH} | grep .jhist | tail -1 | awk '{print $8}')
     
     if (($succ != 0)); then
@@ -96,8 +96,10 @@ do
                 runJob $USE_UFA
             done
             reduceDstat
-            exportResultsToReport
-        fi
+            if [[ "$ITERATIONS_R4H" != "0" ]]; then
+                    exportResultsToReport
+            fi
+	fi
         
         # Vanilla Phase
         PROGRAM="VANILLA"
@@ -112,8 +114,10 @@ do
                 runJob
             done
             reduceDstat
-            exportResultsToReport
-        fi
+            if [[ "$ITERATIONS_VNL" != "0" ]]; then
+                    exportResultsToReport
+            fi
+	fi
         
         # Cleaning Phase
         echo "@@@@@@@@@@@@@@@@@@@ $(date) : cleaning TestDFSIO files @@@@@@@@@@@@@@@@@@@@@@@@" >> $LONG_LOG
