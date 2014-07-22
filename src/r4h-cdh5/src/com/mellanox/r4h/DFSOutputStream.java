@@ -672,15 +672,12 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 			// TODO: this.close() ? - recover ?
 			// TODO: set clientSession to null after closing it and check if null everywhere.
 			// This will solve the bug when more than one message has error and so the client session is closed more than once.
+			DFSOutputStream.LOG.error(DFSOutputStream.this.toString()
+			        + String.format("Msg error occurred: reason=%s, countPacketArrived=%d", reason, countPacketArrived));
 			if (clientSession != null) {
-				DFSOutputStream.LOG.error(DFSOutputStream.this.toString()
-				        + String.format("Msg error occurred: reason=%s, countPacketArrived=%d", reason, countPacketArrived));
 				clientSession.close();
 				clientSession = null;
 				closeEventExpected = true;
-			} else if (LOG.isDebugEnabled()) {
-				DFSOutputStream.LOG.debug(DFSOutputStream.this.toString()
-				        + String.format("Msg error occurred: reason=%s, countPacketArrived=%d", reason, countPacketArrived));
 			}
 		}
 	}
