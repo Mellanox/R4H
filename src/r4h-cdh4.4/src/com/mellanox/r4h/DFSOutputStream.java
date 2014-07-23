@@ -170,6 +170,8 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable {
 	private boolean wasLastPacketAcked = false;
 	// How many times we would like to try the given pipeline before starting excluding datanodes one by one.
 	private final int NUM_OF_RETRIES_BEFORE_ABANDON = 3;
+	// Is used to ensure we get session close event in the end of last block.
+	private boolean wasLastSessionClosed = false;
 
 	private ConcurrentLinkedQueue<Packet> dataQueue = new ConcurrentLinkedQueue<Packet>();
 	private ConcurrentLinkedQueue<Packet> ackQueue = new ConcurrentLinkedQueue<Packet>();
@@ -629,6 +631,7 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable {
 		public void onSessionEvent(EventName session_event, EventReason reason) {
 			switch (session_event) {
 				case SESSION_CLOSED:
+					wasLastSessionClosed = true;
 					String logmsg = String.format("Client Session event=%s, reason=%s", session_event, reason);
 					if (closeEventExpected) {
 						if (DFSOutputStream.LOG.isDebugEnabled()) {
@@ -1068,6 +1071,13 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable {
 		}
 
 		private void closeInternal() {
+			if (!wasLastSessionClosed) {
+				DFSOutputStream.this.eventQHandler.runEventLoop(1, 1000000);
+				if (!wasLastSessionClosed) {
+					LOG.error("Did not receive client session closed event. Closing EQH anyway and then continuing close sequence.");
+				}
+			}
+			DFSOutputStream.this.eventQHandler.close();
 			closeStream();
 			streamerClosed = true;
 			closed = true;
@@ -1471,6 +1481,7 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable {
 						LOG.debug(DFSOutputStream.this.toString() + String.format("Connecting to %s", uri));
 					}
 
+					wasLastSessionClosed = false;
 					DFSOutputStream.this.clientSession = new ClientSession(eventQHandler, uri, clientSessionCallbacks);
 					// ****
 					if (!clientSessionCallbacks.wasSessionEstablished) {

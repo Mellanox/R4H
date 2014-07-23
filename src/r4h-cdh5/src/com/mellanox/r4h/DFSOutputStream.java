@@ -164,6 +164,8 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 	private ConcurrentLinkedQueue<Packet> dataQueue = new ConcurrentLinkedQueue<Packet>();
 	private ConcurrentLinkedQueue<Packet> ackQueue = new ConcurrentLinkedQueue<Packet>();
 	private String name; // used as the toString value
+	// Is used to ensure we get session close event in the end of last block.
+	private boolean wasLastSessionClosed = false;
 	// R4H stuff ends here.
 
 	private final DFSClient dfsClient;
@@ -632,6 +634,7 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 		public void onSessionEvent(EventName session_event, EventReason reason) {
 			switch (session_event) {
 				case SESSION_CLOSED:
+					wasLastSessionClosed = true;
 					String logmsg = String.format("Client Session event=%s, reason=%s", session_event, reason);
 					if (closeEventExpected) {
 						if (DFSOutputStream.LOG.isDebugEnabled()) {
@@ -1039,6 +1042,13 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 		}
 
 		private void closeInternal() {
+			if (!wasLastSessionClosed) {
+				DFSOutputStream.this.eventQHandler.runEventLoop(1, 1000000);
+				if (!wasLastSessionClosed) {
+					LOG.error("Did not receive client session closed event. Closing EQH anyway and then continuing close sequence.");
+				}
+			}
+			DFSOutputStream.this.eventQHandler.close();
 			closeStream();
 			streamerClosed = true;
 			closed = true;
@@ -1594,6 +1604,7 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 						LOG.debug(DFSOutputStream.this.toString() + String.format("Connecting to %s", uri));
 					}
 
+					wasLastSessionClosed = false;
 					DFSOutputStream.this.clientSession = new ClientSession(eventQHandler, uri, clientSessionCallbacks);
 					if (!clientSessionCallbacks.wasSessionEstablished) {
 						DFSOutputStream.this.eventQHandler.runEventLoop(1, 1000);
