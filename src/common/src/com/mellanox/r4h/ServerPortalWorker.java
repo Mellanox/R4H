@@ -35,8 +35,9 @@ import com.mellanox.jxio.MsgPool;
 import com.mellanox.jxio.ServerPortal;
 import com.mellanox.jxio.ServerSession;
 import com.mellanox.jxio.EventQueueHandler.Callbacks;
+import com.mellanox.jxio.WorkerCache.Worker;
 
-public class ServerPortalWorker {
+public class ServerPortalWorker implements Worker {
 	private static final Log LOG = LogFactory.getLog(ServerPortalWorker.class.getName());
 	private final Thread th;
 	final EventQueueHandler eqh;
@@ -46,6 +47,8 @@ public class ServerPortalWorker {
 	private final int msgOutSize;
 	private final int msgInSize;
 	private final int numOfMsgsToBind;
+	private volatile boolean isFree = false;
+
 	private final Callbacks onDynamicMsgPoolAllocation = new EventQueueHandler.Callbacks() {
 
 		@Override
@@ -157,4 +160,12 @@ public class ServerPortalWorker {
 		eqh.breakEventLoop();
 	}
 
+	@Override
+	public boolean isFree() {
+		return this.isFree;
+	}
+
+	void setFree(boolean isFree) {
+		this.isFree = isFree;
+	}
 }

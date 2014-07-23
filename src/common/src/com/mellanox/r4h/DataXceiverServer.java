@@ -23,12 +23,14 @@ import java.util.ArrayList;
 import java.util.Hashtable;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.concurrent.ConcurrentLinkedQueue;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hdfs.server.datanode.DataNode;
 import org.apache.hadoop.hdfs.server.datanode.DataNodeBridge;
+import org.apache.hadoop.util.StringUtils;
 
 import com.mellanox.jxio.EventName;
 import com.mellanox.jxio.EventQueueHandler;
@@ -36,6 +38,8 @@ import com.mellanox.jxio.EventReason;
 import com.mellanox.jxio.ServerPortal;
 import com.mellanox.jxio.ServerSession;
 import com.mellanox.jxio.ServerSession.SessionKey;
+import com.mellanox.jxio.WorkerCache.Worker;
+import com.mellanox.jxio.WorkerCache.WorkerProvider;
 
 /**
  * R4H's parallel class to the original org.apache.hadoop.hdfs.server.datanode.DataXceiverServer
@@ -54,10 +58,12 @@ class DataXceiverServer implements Runnable {
 	final EventQueueHandler eqh;
 	private static final int NUM_OF_PRE_ALLOC_SERVER_PORTAL_WORKERS_DEFAULT = 30;
 	private static final String NUM_OF_PRE_ALLOC_SERVER_PORTAL_WROKERS_PARAM_NAME = "r4h.server.portal.workers";
+	private static final String CONNECTION_CACHING_PARAM_NAME = "r4h.connection.caching";
 	private int numOfServerPortalWorkers;
 	private final URI workerUri;
-	final List<ServerPortalWorker> spPool;
+	final ConcurrentLinkedQueue<ServerPortalWorker> spPool;
 	final Hashtable<ServerSession, ServerPortalWorker> sessionToWorkerHashtable;
+	private boolean conCacheEnable;
 
 	private class DXSCallbacks implements ServerPortal.Callbacks {
 
@@ -81,13 +87,40 @@ class DataXceiverServer implements Runnable {
 		 * @param srcIP
 		 */
 		@Override
-		public void onSessionNew(SessionKey sesKey, String srcIP) {
-			LOG.info(String.format("New session request from %s (uri=%s)", srcIP, sesKey.getUri()));
-			DataXceiver dxc = new DataXceiver(DataXceiverServer.this, sesKey);
-			DataXceiverServer.this.dxcList.add(dxc);
-			attachServerPortalWorker(dxc);
-		}
+		public void onSessionNew(SessionKey sesKey, String srcIP, Worker workerHint) {
+			try {
+				LOG.info(String.format("New session request from %s (uri=%s)", srcIP, sesKey.getUri()));
+				ServerPortalWorker spw;
+				if (!DataXceiverServer.this.conCacheEnable) {
+					spw = getFreeServerPortalWorker();
+				} else {
+					if (workerHint != null) {
+						spw = (ServerPortalWorker) workerHint;
+					} else {
+						LOG.error("JXIO connection cache provided NULL worker hint. Pulling worker manually...");
+						spw = getFreeServerPortalWorker();
+					}
 
+					if (spw.isFree()) {
+						LOG.info("Got cached worker hint to attach with new session");
+						spPool.remove(spw);
+						spw.setFree(false);
+					}
+				}
+
+				if (spw == null) {
+					LOG.fatal("Failed to pull server worker. Rejecting new session request");
+					sp.reject(sesKey, EventReason.UNSUCCESSFUL, "Failed to pull server worker");
+				} else {
+					DataXceiver dxc = new DataXceiver(DataXceiverServer.this, sesKey);
+					DataXceiverServer.this.dxcList.add(dxc);
+					attachServerPortalWorker(dxc, spw);
+				}
+			} catch (Throwable t) {
+				LOG.error("Unexpected error during processing new session event: " + StringUtils.stringifyException(t));
+				sp.reject(sesKey, EventReason.UNSUCCESSFUL, "Exception during processing session event");
+			}
+		}
 	}
 
 	DataXceiverServer(DataNode dn) throws URISyntaxException {
@@ -99,7 +132,20 @@ class DataXceiverServer implements Runnable {
 		this.eqh = new R4HEventHandler(null, null);
 		LOG.debug("Aftet EventQueueHandler creation");
 		DataXceiverServer.DXSCallbacks dxsCbs = this.new DXSCallbacks();
-		this.sp = new ServerPortal(eqh, uri, dxsCbs);
+
+		conCacheEnable = dn.getConf().getBoolean(CONNECTION_CACHING_PARAM_NAME, true);
+		if (conCacheEnable) {
+			LOG.info("Using JXIO connection caching");
+			WorkerProvider wp = new WorkerProvider() {
+				@Override
+				public Worker getWorker() {
+					return getFreeServerPortalWorker();
+				}
+			};
+			this.sp = new ServerPortal(eqh, uri, dxsCbs, wp);
+		} else {
+			this.sp = new ServerPortal(eqh, uri, dxsCbs);
+		}
 		LOG.debug("Aftet ServerPortal creation");
 
 		LOG.trace("writePacketSize=" + dnBridge.getWritePacketSize());
@@ -110,7 +156,7 @@ class DataXceiverServer implements Runnable {
 		LOG.info(String.format("Starting ahead %d server portal worker", numOfServerPortalWorkers));
 		this.sessionToWorkerHashtable = new Hashtable<ServerSession, ServerPortalWorker>();
 		workerUri = new URI(String.format("rdma://%s:0", this.uri.getHost()));
-		this.spPool = new LinkedList<ServerPortalWorker>();
+		this.spPool = new ConcurrentLinkedQueue<ServerPortalWorker>();
 		for (int i = 0; i < this.numOfServerPortalWorkers; i++) {
 			ServerPortalWorker spw = new ServerPortalWorker(workerUri, R4HProtocol.MAX_SEND_PACKETS + R4HProtocol.JX_SERVER_SPARE_MSGS,
 			        dnBridge.getWritePacketSize() + R4HProtocol.JX_BUF_SPARE, R4HProtocol.ACK_SIZE);
@@ -120,6 +166,20 @@ class DataXceiverServer implements Runnable {
 		}
 
 		LOG.trace(this.toString());
+	}
+
+	ServerPortalWorker getFreeServerPortalWorker() {
+		ServerPortalWorker spw;
+		if (spPool.isEmpty()) {
+			LOG.warn("Server workers pool is empty... allocating and starting new worker");
+			spw = new ServerPortalWorker(workerUri, R4HProtocol.MAX_SEND_PACKETS + R4HProtocol.JX_SERVER_SPARE_MSGS, dnBridge.getWritePacketSize()
+			        + R4HProtocol.JX_BUF_SPARE, R4HProtocol.ACK_SIZE);
+			spw.start();
+		} else {
+			spw = spPool.remove();
+		}
+		spw.setFree(false);
+		return spw;
 	}
 
 	@Override
@@ -147,18 +207,7 @@ class DataXceiverServer implements Runnable {
 		        uri, dxcList.size());
 	}
 
-	synchronized void attachServerPortalWorker(DataXceiver dxc) {
-		ServerPortalWorker spw;
-
-		if (spPool.isEmpty()) {
-			LOG.warn("ServerPortalWorker pool is empty. Allocating&Starting new SPW");
-			spw = new ServerPortalWorker(workerUri, R4HProtocol.MAX_SEND_PACKETS + R4HProtocol.JX_SERVER_SPARE_MSGS, dnBridge.getWritePacketSize()
-			        + R4HProtocol.JX_BUF_SPARE, R4HProtocol.ACK_SIZE);
-			spw.start();
-		} else {
-			spw = spPool.remove(0);
-		}
-
+	synchronized void attachServerPortalWorker(DataXceiver dxc, ServerPortalWorker spw) {
 		sessionToWorkerHashtable.put(dxc.getSessionServer(), spw);
 		dxc.setEqh(spw.eqh);
 		dxc.setServerPortalWorker(spw);
@@ -172,7 +221,11 @@ class DataXceiverServer implements Runnable {
 		if (sessionToWorkerHashtable.containsKey(ss)) {
 			ServerPortalWorker spw = sessionToWorkerHashtable.get(ss);
 			sessionToWorkerHashtable.remove(ss);
+			spw.setFree(true);
 			spPool.add(spw);
+		} else {
+			LOG.error(String.format("Failed to retrieve worker from session-->worker hashtable. missing session=%s", ss));
+			LOG.warn("Potential resource leak - Failed to return server portal worker to pool");
 		}
 	}
 

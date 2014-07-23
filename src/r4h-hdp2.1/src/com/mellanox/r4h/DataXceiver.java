@@ -96,8 +96,9 @@ class DataXceiver extends Receiver {
 	private ServerPortalWorker serverPortalWorker;
 	private List<Msg> onFlightMsgs = new LinkedList<Msg>();
 	private long clientOnFlightNumMsgs = 0;
-	private boolean isServerSessionClosed = false;
-	public boolean clientSessionCloseEventExpected = true;
+	private boolean serverSessionClosed = false;
+	private boolean clientSessionClosed = false;
+	boolean clientSessionCloseEventExpected = true;
 
 	class SSCallbacks implements ServerSession.Callbacks {
 		@Override
@@ -158,13 +159,13 @@ class DataXceiver extends Receiver {
 			}
 
 			// Assuming no other kinds of event for SS except CLOSED,ERROR and REJECT
-			isServerSessionClosed = true;
+			serverSessionClosed = true;
 			if ((clientSession != null) && (!clientSession.getIsClosing())) {
 				clientSessionCloseEventExpected = true;
 				clientSession.close();
 			}
 
-			if (clientOnFlightNumMsgs == 0) {
+			if ((clientSessionClosed) || (!hasPipeline())) {
 				if (onFlightMsgs.size() > 0) {
 					LOG.warn(String.format("Discarding %d messages for server seesion %s", onFlightMsgs.size(), serverSession));
 					for (Msg m : onFlightMsgs) {
@@ -174,6 +175,7 @@ class DataXceiver extends Receiver {
 						}
 					}
 					onFlightMsgs.clear();
+					clientOnFlightNumMsgs=0;
 				}
 				dxcs.returnServerWorkerToPool(serverSession);
 			} else {
@@ -239,7 +241,6 @@ class DataXceiver extends Receiver {
 				case SESSION_CLOSED:
 					if ((DataXceiver.this.clientSessionCloseEventExpected) && (clientOnFlightNumMsgs == 0)) {
 						LOG.info(logmsg);
-						clientSessionCloseEventExpected = false;
 					} else {
 						LOG.error(logmsg);
 					}
@@ -255,7 +256,11 @@ class DataXceiver extends Receiver {
 				default:
 					break;
 			}
-			if (isServerSessionClosed) {
+
+			clientSessionCloseEventExpected = false; // refers to close/error/reject
+			clientSessionClosed = true;
+
+			if (serverSessionClosed) {
 				LOG.warn("Client session closed after server session was closed");
 				if (clientOnFlightNumMsgs > 0) {
 					LOG.warn(String.format("Clinet session closed while still mirror messages on flight. Discarding %d messages ...",
