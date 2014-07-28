@@ -25,7 +25,8 @@ runJob()
         FAILED_ATTEMPTS=$((FAILED_ATTEMPTS+1))
     else
         sleep 15 # wait for history file to be created
-	HISTORY_FILE=$(${HDFS_EXEC} dfs -ls ${HISTORY_PATH} | grep .jhist | tail -1 | awk '{print $8}')
+        sudo -u hdfs hdfs dfs -chmod -R 777 ${HISTORY_ROOT}
+        HISTORY_FILE=$(${HDFS_EXEC} dfs -ls ${HISTORY_PATH} | grep .jhist | tail -1 | awk '{print $8}')
         HISTORY=$(${MAPRED_EXEC} job -history ${HISTORY_FILE})
         START_TIME=$(echo "$HISTORY" | grep "Launched At:" | awk '{ print $4 }')
         FINISH_TIME=$(echo "$HISTORY" | grep "Finished At:" | awk '{ print $4 }')

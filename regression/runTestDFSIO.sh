@@ -29,11 +29,17 @@ runJob()
 {
     local USE=$1
     HISTORY_PATH=$(echo ${HISTORY_ROOT}/done/$(date +%Y)/$(date +%m)/$(date +%d)/000000)
+
+    if [ -f ${TMP_JOB_LOG} ]; then
+	sudo rm -rf ${TMP_JOB_LOG}
+    fi
+
     runDstat
-    ${HADOOP_EXEC} jar $TEST_JAR TestDFSIO -Ddfs.replication=${DFS_REPLICATION} ${USE} -write -nrFiles ${nrFiles} -fileSize ${fileSize}MB -resFile $SHORT_LOG >> $LONG_LOG 2>&1
+    ${HADOOP_EXEC} jar $TEST_JAR TestDFSIO -Ddfs.replication=${DFS_REPLICATION} ${USE} -write -nrFiles ${nrFiles} -fileSize ${fileSize}MB -resFile $SHORT_LOG 2>&1 | tee -a $LONG_LOG ${TMP_JOB_LOG} > /dev/null
     succ=$?
     killDstat
-    sleep 15 # wait for history file    
+    sleep 30 # wait for history file    
+    sudo -u hdfs hdfs dfs -chmod -R 777 ${HISTORY_ROOT}
     HISTORY_FILE=$(${HDFS_EXEC} dfs -ls ${HISTORY_PATH} | grep .jhist | tail -1 | awk '{print $8}')
     
     if (($succ != 0)); then
@@ -42,6 +48,10 @@ runJob()
         FAILED_KILLED_MAPPERS=$(${MAPRED_EXEC} job -history ${HISTORY_FILE} | grep -A 8 "Task Summary" | grep "Map" | awk '{print $4 + $5}')
         FAILED_ATTEMPTS=$((FAILED_ATTEMPTS+FAILED_KILLED_MAPPERS))
     fi
+
+    APP_ID=$(grep "Submitted application" ${TMP_JOB_LOG} | awk '{ print $7 }')
+    rm -rf ${TMP_JOB_LOG}
+    ${YARN_EXEC} logs -applicationId ${APP_ID} > ${CONTAINER_LOGS}
     pdsh -w $SLAVES sync
 }
 
@@ -86,6 +96,7 @@ do
         # UFA Phase
         PROGRAM="UFA"
         SHORT_LOG="${LOG_PATH}short_${nrFiles}_${fileSize}_${PROGRAM}.log"
+	CONTAINER_LOGS="${LOG_PATH}container_${nrFiles}_${fileSize}_${PROGRAM}.log"
         FAILED_ATTEMPTS=0
         if [[ "$ITERATIONS_R4H" != "0" ]]; then
             RANGE=$(echo "$ITERATIONS_R4H" | awk '{ for(i=1;i<=$1;i++) print i;}' | tr '\n' ' ')

@@ -1,14 +1,14 @@
 #!/bin/bash
 
 if [[ "$CLUSTER" == "CDH" ]]; then
-	echo "*** Using CDH cluster ***"
-	source defaultsCDH.sh
+    echo "*** Using CDH cluster ***"
+    source defaultsCDH.sh
 elif [[ "$CLUSTER" == "HDP" ]]; then
-	echo "*** Using HDP cluster ***"
-	source defaultsHDP.sh
+    echo "*** Using HDP cluster ***"
+    source defaultsHDP.sh
 else
-	echo "You must export CLUSTER. Use export CLUSTER=CDH or CLUSTER=HDP."
-        exit 1
+    echo "You must export CLUSTER. Use export CLUSTER=CDH or CLUSTER=HDP."
+    exit 1
 fi
 
 source defaults.sh
@@ -27,15 +27,25 @@ restartCluster()
     ${HDFS_EXEC} dfs -expunge
     
     if [[ "$CLUSTER" == "CDH" ]]; then
-	    python cmHandler.py "stop"
-	    if (($? != 0)); then
-	        errorHandler "cluster restart"
-	    fi
+        python cmHandler.py "stop"
+        if (($? != 0)); then
+            errorHandler "${CLUSTER} cluster restart"
+        fi
 
-	    python cmHandler.py "start"
-	    if (($? != 0)); then
-	        errorHandler "cluster restart"
-	    fi
+        python cmHandler.py "start"
+        if (($? != 0)); then
+            errorHandler "${CLUSTER} cluster restart"
+        fi
+    elif [[ "$CLUSTER" == "HDP" ]]; then
+        bash ambariHandler.sh "stop"
+        if (($? != 0)); then
+            errorHandler "${CLUSTER} cluster restart"
+        fi
+
+        bash ambariHandler.sh "start"
+        if (($? != 0)); then
+            errorHandler "${CLUSTER} cluster restart"
+        fi
     fi
 }
 
@@ -130,26 +140,26 @@ while getopts "$optspec" optchar; do
                 no_restart)
                     export NO_RESTART=1
                     ;;
-		iter_vnl=*)
-		    val=${OPTARG#*=}
+        iter_vnl=*)
+            val=${OPTARG#*=}
                     opt=${OPTARG%=$val}
-		    export ITERATIONS_VNL="${val}"
-		    ;;
-		iter_r4h=*)
-		    val=${OPTARG#*=}
+            export ITERATIONS_VNL="${val}"
+            ;;
+        iter_r4h=*)
+            val=${OPTARG#*=}
                     opt=${OPTARG%=$val}
-		    export ITERATIONS_R4H="${val}"
-		    ;;
-		comment_subject=*)
-		    val=${OPTARG#*=}
+            export ITERATIONS_R4H="${val}"
+            ;;
+        comment_subject=*)
+            val=${OPTARG#*=}
                     opt=${OPTARG%=$val}
-		    export COMMENT_SUBJECT="${val}"
-		    ;;
-		comment_body=*)
-		    val=${OPTARG#*=}
+            export COMMENT_SUBJECT="${val}"
+            ;;
+        comment_body=*)
+            val=${OPTARG#*=}
                     opt=${OPTARG%=$val}
-		    export COMMENT_BODY="${val}"
-		    ;;
+            export COMMENT_BODY="${val}"
+            ;;
                 *)
                     if [ "$OPTERR" = 1 ] && [ "${optspec:0:1}" != ":" ]; then
                         echo "Unknown option --${OPTARG}" >&2
