@@ -175,10 +175,10 @@ class DataXceiver extends Receiver {
 						}
 					}
 					onFlightMsgs.clear();
-					clientOnFlightNumMsgs=0;
+					clientOnFlightNumMsgs = 0;
 				}
 				dxcs.returnServerWorkerToPool(serverSession);
-			} else {
+			} else if (onFlightMsgs.size() > 0) {
 				LOG.warn("Server session closed but there are still messages on flight for proxy client - waiting for client close event to discard messages and return ServerWorker to pool");
 			}
 
@@ -517,7 +517,7 @@ class DataXceiver extends Receiver {
 			LOG.warn("Cannot reply response while handling packet processing exception because pkt header is NULL");
 		}
 
-		if ((DataXceiver.this.clientSession != null) && (!DataXceiver.this.clientSession.getIsClosing())){
+		if ((DataXceiver.this.clientSession != null) && (!DataXceiver.this.clientSession.getIsClosing())) {
 			clientSessionCloseEventExpected = true;
 			DataXceiver.this.clientSession.close();
 		}
@@ -695,7 +695,7 @@ class DataXceiver extends Receiver {
 	}
 
 	void close() {
-		if ((DataXceiver.this.clientSession != null) && (!DataXceiver.this.clientSession.getIsClosing()) ) {
+		if ((DataXceiver.this.clientSession != null) && (!DataXceiver.this.clientSession.getIsClosing())) {
 			clientSessionCloseEventExpected = true;
 			DataXceiver.this.clientSession.close();
 		}

@@ -175,10 +175,10 @@ class DataXceiver extends Receiver {
 						}
 					}
 					onFlightMsgs.clear();
-					clientOnFlightNumMsgs=0;
+					clientOnFlightNumMsgs = 0;
 				}
 				dxcs.returnServerWorkerToPool(serverSession);
-			} else {
+			} else if (onFlightMsgs.size() > 0) {
 				LOG.warn("Server session closed but there are still messages on flight for proxy client - waiting for client close event to discard messages and return ServerWorker to pool");
 			}
 
