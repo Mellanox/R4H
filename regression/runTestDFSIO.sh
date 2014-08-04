@@ -31,7 +31,7 @@ runJob()
     HISTORY_PATH=$(echo ${HISTORY_ROOT}/done/$(date +%Y)/$(date +%m)/$(date +%d)/000000)
 
     if [ -f ${TMP_JOB_LOG} ]; then
-	sudo rm -rf ${TMP_JOB_LOG}
+    sudo rm -rf ${TMP_JOB_LOG}
     fi
 
     runDstat
@@ -96,13 +96,13 @@ do
         # UFA Phase
         PROGRAM="UFA"
         SHORT_LOG="${LOG_PATH}short_${nrFiles}_${fileSize}_${PROGRAM}.log"
-	CONTAINER_LOGS="${LOG_PATH}container_${nrFiles}_${fileSize}_${PROGRAM}.log"
         FAILED_ATTEMPTS=0
         if [[ "$ITERATIONS_R4H" != "0" ]]; then
             RANGE=$(echo "$ITERATIONS_R4H" | awk '{ for(i=1;i<=$1;i++) print i;}' | tr '\n' ' ')
             
             for i in $RANGE
             do
+                CONTAINER_LOGS="${LOG_PATH}containers_${nrFiles}_${fileSize}_${PROGRAM}_${i}.log"
                 echo "@@@@@@@@@@@@@@@@@@@ $(date) : running ${PROGRAM} with ${nrFiles} file of size ${fileSize}MB, Run number ${i} out of $ITERATIONS_R4H @@@@@@@@@@@@@@@@@@@@@@@@" >> $LONG_LOG
                 runJob $USE_UFA
             done
@@ -121,6 +121,7 @@ do
             RANGE=$(echo "$ITERATIONS_VNL" | awk '{ for(i=1;i<=$1;i++) print i;}' | tr '\n' ' ')
             for j in $RANGE
             do
+                CONTAINER_LOGS="${LOG_PATH}containers_${nrFiles}_${fileSize}_${PROGRAM}_${i}.log"
                 echo "@@@@@@@@@@@@@@@@@@@ $(date) : running ${PROGRAM} with ${nrFiles} files of size ${fileSize}MB, Run number ${j} out of $ITERATIONS_VNL @@@@@@@@@@@@@@@@@@@@@@@@" >> $LONG_LOG
                 runJob
             done

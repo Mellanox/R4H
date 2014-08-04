@@ -1,6 +1,6 @@
 #!/bin/bash
 
-MAX_ATTEMPTS=6
+MAX_ATTEMPTS=10
 
 stopService()
 {

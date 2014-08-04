@@ -20,7 +20,7 @@ runJob()
     ${HDFS_EXEC} dfs -rm -r ${TERAGEN_PATH}
     HISTORY_PATH=$(echo ${HISTORY_ROOT}/done/$(date +%Y)/$(date +%m)/$(date +%d)/000000)
     echo "Executing: ${HADOOP_EXEC} jar $EXAMPLES_JAR teragen $USE ${jobSize} ${TERAGEN_PATH}"
-    ${HADOOP_EXEC} jar $EXAMPLES_JAR teragen ${USE} -Ddfs.replication=${DFS_REPLICATION} -Dmapred.map.tasks=${MAPS} ${jobSize} ${TERAGEN_PATH} >> $LONG_LOG 2>&1
+    ${HADOOP_EXEC} jar $EXAMPLES_JAR teragen ${USE} -Ddfs.replication=${DFS_REPLICATION} -Dmapreduce.job.maps=${MAPS} ${jobSize} ${TERAGEN_PATH} >> $LONG_LOG 2>&1
     if (($? != 0)); then
         FAILED_ATTEMPTS=$((FAILED_ATTEMPTS+1))
     else

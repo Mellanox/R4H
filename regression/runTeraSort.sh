@@ -2,7 +2,7 @@
 
 jobSizeSet=$1
 reduceTasksSet=$2
-MAPS=$(echo $SLAVES | awk '{ print split($0,a,","); }')
+MAPS=$(echo $SLAVES | awk '{ print split($0,a,",")*4; }')
 
 exportResultsToReport()
 {
@@ -17,11 +17,11 @@ exportResultsToReport()
 generateData()
 {
     local size=$1
-    echo "Generating data of size ${size}"
-    echo "Cleaning ${TERAGEN_PATH}"
+    echo "Generating data of size ${size}" | tee -a ${LONG_LOG}
+    echo "Cleaning ${TERAGEN_PATH}" | tee -a ${LONG_LOG}
     ${HDFS_EXEC} dfs -rm -r ${TERAGEN_PATH}
-    echo "Executing: ${HADOOP_EXEC} jar $EXAMPLES_JAR teragen -Dmapred.map.tasks=${MAPS} ${jobSize} ${TERAGEN_PATH}"
-    ${HADOOP_EXEC} jar $EXAMPLES_JAR teragen -Dmapred.map.tasks=${MAPS} ${jobSize} ${TERAGEN_PATH} >> $LONG_LOG 2>&1
+    echo "Executing: ${HADOOP_EXEC} jar $EXAMPLES_JAR teragen -Dmapred.map.tasks=${MAPS} ${jobSize} ${TERAGEN_PATH}" | tee -a ${LONG_LOG}
+    ${HADOOP_EXEC} jar $EXAMPLES_JAR teragen -Dmapreduce.job.maps=${MAPS} ${jobSize} ${TERAGEN_PATH} >> $LONG_LOG 2>&1
     if (($? != 0)); then
         echo "Data generation FAILED!" | tee -a $LONG_LOG
         exit 1
@@ -76,9 +76,9 @@ do
             runJob $reduceTasks $USE_UFA
         done
         
-	if [[ "$ITERATIONS_R4H" != "0" ]]; then
-		exportResultsToReport
-	fi
+        if [[ "$ITERATIONS_R4H" != "0" ]]; then
+            exportResultsToReport
+        fi
         
         # Vanilla Phase
         TIMES=""
@@ -90,8 +90,8 @@ do
             echo "@@@@@@@@@@@@@@@@@@@ $(date) : (TERASORT) running ${PROGRAM}, job size = ${jobSize}, reducers = $reduceTasks Run number ${j} out of $ITERATIONS_VNL @@@@@@@@@@@@@@@@@@@@@@@@" >> $LONG_LOG
             runJob $reduceTasks
         done
-	if [[ "$ITERATIONS_VNL" != "0" ]]; then
-                exportResultsToReport
+        if [[ "$ITERATIONS_VNL" != "0" ]]; then
+            exportResultsToReport
         fi        
     done
 done
