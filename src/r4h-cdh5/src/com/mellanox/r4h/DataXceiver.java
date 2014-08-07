@@ -348,6 +348,9 @@ class DataXceiver extends Receiver {
 		//
 		if (hasPipeline()) {
 			try {
+				blockReceiver.setMirrorOut(new DummyDataOutputStream()); // we send to pipeline with RDMA and then keep using vanila's original
+				                                                         // receivePacket function by modifying mirror stream with dummy stream to
+																		 // avoid sending to pipeline from vanila's flow
 				openPipelineConnection();
 				sendOprHeaderToPipeline(msg, originalBlock);
 			} catch (Exception e) {
