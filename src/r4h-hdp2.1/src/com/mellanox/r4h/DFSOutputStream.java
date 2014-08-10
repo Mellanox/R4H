@@ -971,7 +971,7 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 					long now0 = System.nanoTime();
 					long now1 = System.nanoTime();
 					one.prepareBeforeSend();
-					DFSOutputStream.this.clientSession.sendRequest(one.msg);
+					R4HProtocol.wrappedSendRequest(DFSOutputStream.this.clientSession, one.msg, LOG);
 					long now2 = System.nanoTime();
 					sentSeqenceNum++;
 
@@ -1042,12 +1042,6 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 		}
 
 		private void closeInternal() {
-			if (!wasLastSessionClosed) {
-				DFSOutputStream.this.eventQHandler.runEventLoop(1, 1000000);
-				if (!wasLastSessionClosed) {
-					LOG.error("Did not receive client session closed event. Closing EQH anyway and then continuing close sequence.");
-				}
-			}
 			DFSOutputStream.this.eventQHandler.close();
 			closeStream();
 			streamerClosed = true;
@@ -1669,7 +1663,7 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 					}
 
 					long now1 = System.nanoTime();
-					DFSOutputStream.this.clientSession.sendRequest(message);
+					R4HProtocol.wrappedSendRequest(DFSOutputStream.this.clientSession, message, LOG);
 					long now2 = System.nanoTime();
 
 					if (!clientSessionCallbacks.wasSessionEstablished) {

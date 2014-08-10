@@ -80,7 +80,7 @@ public class ServerPortalWorker implements Worker {
 		@Override
 		public void run() {
 			if (!session.getIsClosing()) {
-				session.sendResponse(msg);
+				R4HProtocol.wrappedSendResponse(session, msg, LOG);
 				if (onFlightMsgs != null) { // Compatibility for CDH44 - no aligned with JXIO discard api yet
 					onFlightMsgs.remove(msg);
 				}

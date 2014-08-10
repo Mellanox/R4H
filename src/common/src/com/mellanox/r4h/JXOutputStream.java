@@ -20,6 +20,8 @@ package com.mellanox.r4h;
 import java.io.IOException;
 import java.io.OutputStream;
 
+import org.apache.commons.logging.LogFactory;
+
 import com.mellanox.jxio.ClientSession;
 import com.mellanox.jxio.Msg;
 import com.mellanox.jxio.MsgPool;
@@ -108,7 +110,7 @@ public class JXOutputStream extends OutputStream {
 	 */
 	public synchronized void flush() throws IOException {
 		if (!flushed) {
-			cs.sendRequest(msg);
+			R4HProtocol.wrappedSendRequest(cs, msg, LogFactory.getLog(JXOutputStream.class));
 			msg = null;
 			flushed = true;
 		}

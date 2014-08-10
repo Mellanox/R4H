@@ -350,7 +350,7 @@ class DataXceiver extends Receiver {
 			try {
 				blockReceiver.setMirrorOut(new DummyDataOutputStream()); // we send to pipeline with RDMA and then keep using vanila's original
 				                                                         // receivePacket function by modifying mirror stream with dummy stream to
-																		 // avoid sending to pipeline from vanila's flow
+				                                                         // avoid sending to pipeline from vanila's flow
 				openPipelineConnection();
 				sendOprHeaderToPipeline(msg, originalBlock);
 			} catch (Exception e) {
@@ -613,7 +613,7 @@ class DataXceiver extends Receiver {
 		Msg mirror = context.getMsg().getMirror(false);
 		mirror.getOut().position(mirror.getOut().limit());
 		mirror.setUserContext(context);
-		clientSession.sendRequest(mirror);
+		R4HProtocol.wrappedSendRequest(clientSession, mirror, LOG);
 		clientOnFlightNumMsgs++;
 	}
 
@@ -636,7 +636,7 @@ class DataXceiver extends Receiver {
 		        oprHeader.getMaxBytesRcvd(), oprHeader.getLatestGenerationStamp(), oprHeader.getRequestedChecksum(), oprHeader.getCachingStrategy());
 		mirrorOut.flush();
 		clientOnFlightNumMsgs++;
-		clientSession.sendRequest(mirror);
+		R4HProtocol.wrappedSendRequest(clientSession, mirror, LOG);
 	}
 
 	private boolean hasPipeline() {
@@ -657,7 +657,7 @@ class DataXceiver extends Receiver {
 		BlockOpResponseProto.newBuilder().setStatus(status).setFirstBadLink(firstBadNode).build().writeDelimitedTo(replyOut);
 		replyOut.flush();
 		LOG.info("sending response for src: " + uri);
-		serverSession.sendResponse(msg);
+		R4HProtocol.wrappedSendResponse(serverSession, msg, LOG);
 		onFlightMsgs.remove(msg);
 	}
 
@@ -676,7 +676,7 @@ class DataXceiver extends Receiver {
 				LOG.debug("send ack response  : " + replyAck + "\nuri=" + uri);
 			}
 
-			serverSession.sendResponse(msg);
+			R4HProtocol.wrappedSendResponse(serverSession, msg, LOG);
 			onFlightMsgs.remove(msg);
 		}
 	}
@@ -689,7 +689,7 @@ class DataXceiver extends Receiver {
 		msg.getOut().clear();
 		BlockOpResponseProto protobuff = BlockOpResponseProto.newBuilder().setStatus(mirrorInStatus).setFirstBadLink(firstBadLink).build();
 		protobuff.writeDelimitedTo(new ByteBufferOutputStream(msg.getOut()));
-		serverSession.sendResponse(msg);
+		R4HProtocol.wrappedSendResponse(serverSession, msg, LOG);
 		onFlightMsgs.remove(msg);
 	}
 
