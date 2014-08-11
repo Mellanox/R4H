@@ -6,7 +6,7 @@
 export DATE=$(date +%Y-%m-%d_%H%M)
 export HADOOP_VERSION=$(${HADOOP_EXEC} version | head -n 1)
 export USE_UFA="-Dfs.hdfs.impl=com.mellanox.r4h.DistributedFileSystem"
-export LOG_PATH="/.autodirect/acclgwork/ufa/daily_results/R4H_Daily_${DATE}/"
+export LOG_PATH="/.autodirect/acclgwork/ufa/daily_results/R4H_${CLUSTER}_${DATE}_$(hostname)/"
 export LONG_LOG="${LOG_PATH}long_${DATE}.log"
 export TMP_JOB_LOG="/.autodirect/acclgwork/ufa/tmp/tmp_job_log.txt"
 export REPORT_PATH_ERROR="${LOG_PATH}error_summary_${DATE}.txt"
