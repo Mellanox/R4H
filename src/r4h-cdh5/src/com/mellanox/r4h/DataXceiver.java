@@ -261,7 +261,7 @@ class DataXceiver extends Receiver {
 			clientSessionClosed = true;
 
 			if (serverSessionClosed) {
-				LOG.warn("Client session closed after server session was closed");
+				LOG.debug("Client session closed after server session was closed");
 				if (clientOnFlightNumMsgs > 0) {
 					LOG.warn(String.format("Clinet session closed while still mirror messages on flight. Discarding %d messages ...",
 					        onFlightMsgs.size()));
