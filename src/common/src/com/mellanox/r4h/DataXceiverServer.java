@@ -19,10 +19,7 @@ package com.mellanox.r4h;
 
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.util.ArrayList;
 import java.util.Hashtable;
-import java.util.LinkedList;
-import java.util.List;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
 import org.apache.commons.logging.Log;
@@ -52,7 +49,6 @@ class DataXceiverServer implements Runnable {
 	static final Log LOG = LogFactory.getLog(DataXceiverServer.class.getName());
 	private final ThreadGroup threadGroup;
 	private final URI uri;
-	private final List<DataXceiver> dxcList;
 	final ServerPortal sp;
 	final DataNodeBridge dnBridge;
 	final EventQueueHandler eqh;
@@ -62,7 +58,7 @@ class DataXceiverServer implements Runnable {
 	private int numOfServerPortalWorkers;
 	private final URI workerUri;
 	final ConcurrentLinkedQueue<ServerPortalWorker> spPool;
-	final Hashtable<ServerSession, ServerPortalWorker> sessionToWorkerHashtable;
+	final Hashtable<ServerSession, DataXceiver> sessionToWorkerHashtable;
 	private boolean conCacheEnable;
 
 	private class DXSCallbacks implements ServerPortal.Callbacks {
@@ -112,9 +108,8 @@ class DataXceiverServer implements Runnable {
 					LOG.fatal("Failed to pull server worker. Rejecting new session request");
 					sp.reject(sesKey, EventReason.UNSUCCESSFUL, "Failed to pull server worker");
 				} else {
-					DataXceiver dxc = new DataXceiver(DataXceiverServer.this, sesKey);
-					DataXceiverServer.this.dxcList.add(dxc);
-					attachServerPortalWorker(dxc, spw);
+					DataXceiver dxc = new DataXceiver(DataXceiverServer.this, spw, sesKey);
+					attachServerPortalWorker(dxc);
 				}
 			} catch (Throwable t) {
 				LOG.error("Unexpected error during processing new session event: " + StringUtils.stringifyException(t));
@@ -125,7 +120,6 @@ class DataXceiverServer implements Runnable {
 
 	DataXceiverServer(DataNode dn) throws URISyntaxException {
 		this.dnBridge = new DataNodeBridge(dn); // TODO: remove debug DNexpoable and rename top DataNodeBridge
-		this.dxcList = new ArrayList<DataXceiver>();
 		this.uri = new URI(String.format("rdma://%s", dn.getDisplayName()));
 		this.threadGroup = new ThreadGroup("R4H Datanode Threads");
 		LOG.info("Creating DataXceiverServer - uri=" + uri);
@@ -154,7 +148,7 @@ class DataXceiverServer implements Runnable {
 		this.numOfServerPortalWorkers = dnConf.getInt(NUM_OF_PRE_ALLOC_SERVER_PORTAL_WROKERS_PARAM_NAME,
 		        NUM_OF_PRE_ALLOC_SERVER_PORTAL_WORKERS_DEFAULT);
 		LOG.info(String.format("Starting ahead %d server portal worker", numOfServerPortalWorkers));
-		this.sessionToWorkerHashtable = new Hashtable<ServerSession, ServerPortalWorker>();
+		this.sessionToWorkerHashtable = new Hashtable<ServerSession, DataXceiver>();
 		workerUri = new URI(String.format("rdma://%s:0", this.uri.getHost()));
 		this.spPool = new ConcurrentLinkedQueue<ServerPortalWorker>();
 		for (int i = 0; i < this.numOfServerPortalWorkers; i++) {
@@ -190,12 +184,8 @@ class DataXceiverServer implements Runnable {
 	}
 
 	public void stop() {
-		LOG.debug("Closing all DataXceivers");
-		for (DataXceiver dx : dxcList) {
-			dx.close();
-		}
-		LOG.debug("After DataXceivers close");
-
+		// TODO: PROPER CLOSE OF ALL WORKERS!
+		
 		LOG.debug("Closing main listener event queue handler");
 		eqh.close();
 		LOG.debug("After main listener event queue handler close");
@@ -204,11 +194,12 @@ class DataXceiverServer implements Runnable {
 	@Override
 	public String toString() {
 		return String.format("DataXceiverServer{SP='%s', EQH='%s', ThreadPool='%s', URI='%s', #DXC='%d'}", sp, eqh.toString(), threadGroup.getName(),
-		        uri, dxcList.size());
+		        uri, sessionToWorkerHashtable.size());
 	}
 
-	synchronized void attachServerPortalWorker(DataXceiver dxc, ServerPortalWorker spw) {
-		sessionToWorkerHashtable.put(dxc.getSessionServer(), spw);
+	synchronized void attachServerPortalWorker(DataXceiver dxc) {
+		sessionToWorkerHashtable.put(dxc.getSessionServer(), dxc);
+		ServerPortalWorker spw = dxc.getServerPortalWorker();
 		dxc.setEqh(spw.eqh);
 		dxc.setServerPortalWorker(spw);
 		sp.forward(spw.sp, dxc.getSessionServer());
@@ -219,7 +210,8 @@ class DataXceiverServer implements Runnable {
 
 	synchronized void returnServerWorkerToPool(ServerSession ss) {
 		if (sessionToWorkerHashtable.containsKey(ss)) {
-			ServerPortalWorker spw = sessionToWorkerHashtable.get(ss);
+			DataXceiver dxc = sessionToWorkerHashtable.get(ss);
+			ServerPortalWorker spw = dxc.getServerPortalWorker();
 			sessionToWorkerHashtable.remove(ss);
 			spw.setFree(true);
 			spPool.add(spw);

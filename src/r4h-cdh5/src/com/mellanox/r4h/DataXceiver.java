@@ -98,6 +98,7 @@ class DataXceiver extends Receiver {
 	private long clientOnFlightNumMsgs = 0;
 	private boolean serverSessionClosed = false;
 	private boolean clientSessionClosed = false;
+	private ServerPortalWorker worker;
 	boolean clientSessionCloseEventExpected = true;
 
 	class SSCallbacks implements ServerSession.Callbacks {
@@ -277,8 +278,9 @@ class DataXceiver extends Receiver {
 
 	}
 
-	DataXceiver(DataXceiverServer dxcs, SessionKey sKey) {
+	DataXceiver(DataXceiverServer dxcs, ServerPortalWorker spw, SessionKey sKey) {
 		this.dxcs = dxcs;
+		this.worker = spw;
 		this.dnBridge = dxcs.dnBridge;
 		this.eqh = dxcs.eqh;
 		this.packetAsyncIOExecutor = Executors.newSingleThreadExecutor(); // TODO: get from pool ?
@@ -852,4 +854,7 @@ class DataXceiver extends Receiver {
 
 	}
 
+	ServerPortalWorker getServerPortalWorker() {
+		return worker;
+    }
 }
