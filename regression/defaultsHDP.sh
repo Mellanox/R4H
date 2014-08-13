@@ -1,8 +1,13 @@
 #!/bin/bash
 
 # HDP2.1 Specifics
-export AMBARI_HOST="r-aa-zorro002"
-export SLAVES="r-aa-zorro003,r-aa-zorro004,r-aa-zorro005"
+if [[ "$(hostname)" == *zorro002* ]]; then
+	export AMBARI_HOST="r-aa-zorro002"
+	export SLAVES="r-aa-zorro003,r-aa-zorro004,r-aa-zorro005"
+else
+	export AMBARI_HOST="r-aa-zorro006"
+        export SLAVES="r-aa-zorro007,r-aa-zorro008,r-aa-zorro009"
+fi
 export MY_HADOOP_HOME="/usr/lib/hadoop"
 export YARN_CFG="/etc/hadoop/conf"
 export HADOOP_EXEC="hadoop"

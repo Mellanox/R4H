@@ -122,16 +122,17 @@ def main(argv):
          filecount = row[1]
          line += 1
          # Formulas for Total's
-         worksheet.write_formula(line, 19, create_formula_str(line, 2, 3, '*'), num_format)
-         worksheet.write_formula(line, 20, create_formula_str(line, 2, 7, '*'), num_format)
-         worksheet.write_formula(line, 21, create_formula_str(line, 11, 17, '*'), num_format)
-         worksheet.write_formula(line, 22, create_formula_str(line, 14, 18, '*'), num_format)
-
+      
+      filecount_float = float(filecount.replace("_files",""))
+      float_bw_value = float(bw_value)
+      float_avg_cpu = float(avg_cpu)
+      float_time_value = float(time_value)
+      
       worksheet.write_string(line, 0, '{0} {1}'.format(filesize, filecount))
       worksheet.write_number(line, 1, float(filesize.replace("MB","")))
-      worksheet.write_number(line, 2, float(filecount.replace("_files","")))
+      worksheet.write_number(line, 2, filecount_float)
       if row[0] == 'UFA':
-         worksheet.write_number(line, 3, float(bw_value), num_format)
+         worksheet.write_number(line, 3, float_bw_value, num_format)         
          worksheet.write_number(line, 4, float(bw_value_min), num_format)
          worksheet.write_number(line, 5, float(bw_value_max), num_format)
          uda_error_max.append(str(float(bw_value_max) - float(bw_value)))
@@ -140,9 +141,12 @@ def main(argv):
          worksheet.write_number(line, 11, float(time_value), num_format)
          worksheet.write_number(line, 12, float(time_value_min), num_format)
          worksheet.write_number(line, 13, float(time_value_max), num_format)
-         worksheet.write_number(line, 17, float(avg_cpu), num_format)
+         worksheet.write_number(line, 17, float_avg_cpu, num_format)
+         # Replaces formulas
+         worksheet.write_number(line, 19, filecount_float*float_bw_value,num_format)
+         worksheet.write_number(line, 21, float_time_value*float_avg_cpu,num_format)
       else:
-         worksheet.write_number(line, 7, float(bw_value), num_format)
+         worksheet.write_number(line, 7, float_bw_value, num_format)
          worksheet.write_number(line, 8, float(bw_value_min), num_format)
          worksheet.write_number(line, 9, float(bw_value_max), num_format)
          vanilla_error_max.append(str(float(bw_value_max) - float(bw_value)))
@@ -152,9 +156,19 @@ def main(argv):
          worksheet.write_number(line, 15, float(time_value_min), num_format)
          worksheet.write_number(line, 16, float(time_value_max), num_format)
          worksheet.write_number(line, 18, float(avg_cpu), num_format)
+         # Replaces formulas
+         worksheet.write_number(line, 20,filecount_float*float_bw_value,num_format)
+         worksheet.write_number(line, 22,float_time_value*float_avg_cpu,num_format)
+      
+      # Insert formulas
+      # worksheet.write_formula(line, 19, create_formula_str(line, 2, 3, '*'), num_format)
+      # worksheet.write_formula(line, 20, create_formula_str(line, 2, 7, '*'), num_format)
+      # worksheet.write_formula(line, 21, create_formula_str(line, 11, 17, '*'), num_format) # CPU*TIME R4H
+      # worksheet.write_formula(line, 22, create_formula_str(line, 14, 18, '*'), num_format) # CPU*TIME VNL
 
    # Add BAD values condition formatting (RED cells for HDFS FAILUREs)
    worksheet.conditional_format(1, 6, line, 6, {'type': 'cell', 'criteria': '>', 'value': 0, 'format': red_call_format})
+   worksheet.conditional_format(1, 10, line, 10, {'type': 'cell', 'criteria': '>', 'value': 0, 'format': red_call_format})
 
    line += 1 # include last line which we prepared
 
@@ -162,27 +176,27 @@ def main(argv):
    # Create BW chart
    chart1 = create_chart(workbook, "R4H vs. Vanilla (AVG BW)", 'A', 'D', 'H', 1, 2, line, uda_error_max, uda_error_min, vanilla_error_max, vanilla_error_min)
    # Insert the chart into the worksheet (with an offset)
-   worksheet.insert_chart('A10', chart1, {'x_offset': 25, 'y_offset': 10})
+   worksheet.insert_chart('A10', chart1, {'x_offset': 10, 'y_offset': 10})
 
    # Create Time chart
    chart2 = create_chart(workbook, "R4H vs. Vanilla (Time)", 'A', 'L', 'O', 1, 2, line)
    # Insert the chart into the worksheet (with an offset)
-   worksheet.insert_chart('K10', chart2, {'x_offset': 25, 'y_offset': 10})
+   worksheet.insert_chart('A30', chart2, {'x_offset': 10, 'y_offset': 10})
    
    # Create CPU chart
    chart3 = create_chart(workbook, "R4H vs. Vanilla (AVG CPU Usage)", 'A', 'R', 'S', 1, 2, line)
    # Insert the chart into the worksheet (with an offset)
-   worksheet.insert_chart('U10', chart3, {'x_offset': 25, 'y_offset': 10})
+   worksheet.insert_chart('A50', chart3, {'x_offset': 10, 'y_offset': 10})
    
    # Create Total BW chart
    chart4 = create_chart(workbook, "R4H vs. Vanilla (Total BW)", 'A', 'T', 'U', 1, 2, line)
    # Insert the chart into the worksheet (with an offset)
-   worksheet.insert_chart('A31', chart4, {'x_offset': 25, 'y_offset': 10})
+   worksheet.insert_chart('A70', chart4, {'x_offset': 10, 'y_offset': 10})
    
    # Create Total CPU chart
    chart5 = create_chart(workbook, "R4H vs. Vanilla (Total CPU Usage)", 'A', 'V', 'W', 1, 2, line)
    # Insert the chart into the worksheet (with an offset)
-   worksheet.insert_chart('K31', chart5, {'x_offset': 25, 'y_offset': 10})
+   worksheet.insert_chart('A90', chart5, {'x_offset': 10, 'y_offset': 10})
    
    workbook.close()
 

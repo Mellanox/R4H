@@ -121,7 +121,7 @@ do
             RANGE=$(echo "$ITERATIONS_VNL" | awk '{ for(i=1;i<=$1;i++) print i;}' | tr '\n' ' ')
             for j in $RANGE
             do
-                CONTAINER_LOGS="${LOG_PATH}containers_${nrFiles}_${fileSize}_${PROGRAM}_${i}.log"
+                CONTAINER_LOGS="${LOG_PATH}containers_${nrFiles}_${fileSize}_${PROGRAM}_${j}.log"
                 echo "@@@@@@@@@@@@@@@@@@@ $(date) : running ${PROGRAM} with ${nrFiles} files of size ${fileSize}MB, Run number ${j} out of $ITERATIONS_VNL @@@@@@@@@@@@@@@@@@@@@@@@" >> $LONG_LOG
                 runJob
             done
