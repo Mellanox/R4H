@@ -162,7 +162,7 @@ class DataXceiverServer implements Runnable {
 		LOG.trace(this.toString());
 	}
 
-	ServerPortalWorker getFreeServerPortalWorker() {
+	synchronized ServerPortalWorker getFreeServerPortalWorker() {
 		ServerPortalWorker spw;
 		if (spPool.isEmpty()) {
 			LOG.warn("Server workers pool is empty... allocating and starting new worker");
@@ -212,8 +212,8 @@ class DataXceiverServer implements Runnable {
 			DataXceiver dxc = sessionToWorkerHashtable.get(ss);
 			ServerPortalWorker spw = dxc.getServerPortalWorker();
 			sessionToWorkerHashtable.remove(ss);
-			spw.setFree(true);
 			spPool.add(spw);
+			spw.setFree(true);
 		} else {
 			LOG.error(String.format("Failed to retrieve worker from session-->worker hashtable. missing session=%s", ss));
 			LOG.warn("Potential resource leak - Failed to return server portal worker to pool");
