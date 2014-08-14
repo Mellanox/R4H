@@ -88,7 +88,6 @@ class DataXceiver extends Receiver {
 	private WriteOprHeader oprHeader;
 	public BlockReceiverBridge blockReceiver;
 	private DataXceiverServer dxcs;
-	private EventQueueHandler eqh;
 	private ServerSession serverSession;
 	private Msg currMsg = null;
 	private ExecutorService packetAsyncIOExecutor;
@@ -282,7 +281,6 @@ class DataXceiver extends Receiver {
 		this.dxcs = dxcs;
 		this.worker = spw;
 		this.dnBridge = dxcs.dnBridge;
-		this.eqh = dxcs.eqh;
 		this.packetAsyncIOExecutor = Executors.newSingleThreadExecutor(); // TODO: get from pool ?
 		this.uri = sKey.getUri();
 		DataXceiver.SSCallbacks ssCbs = this.new SSCallbacks();
@@ -626,7 +624,7 @@ class DataXceiver extends Receiver {
 		int index = clientURI.indexOf("&clientHash=");
 		URI uri = R4HProtocol.createPipelineURI(oprHeader.getTargets(), clientURI.substring(index));
 		LOG.info("Open a proxy client session: " + uri);
-		clientSession = new ClientSession(eqh, uri, csCBs);
+		clientSession = new ClientSession(worker.eqh, uri, csCBs);
 	}
 
 	private void sendOprHeaderToPipeline(Msg msg, ExtendedBlock origBlk) throws IOException {
@@ -713,12 +711,7 @@ class DataXceiver extends Receiver {
 
 	@Override
 	public String toString() {
-		return String.format("DataXceiver{EQH='%s', SS='%s', SC='%s'}", eqh.toString(), serverSession.toString(), (clientSession == null) ? "-"
-		        : clientSession.toString());
-	}
-
-	void setEqh(EventQueueHandler eqh) {
-		this.eqh = eqh;
+		return String.format("DataXceiver{EQH='%s', SS='%s', SC='%s'}", worker.eqh, serverSession, (clientSession == null) ? "-" : clientSession);
 	}
 
 	@Override
@@ -856,6 +849,6 @@ class DataXceiver extends Receiver {
 
 	ServerPortalWorker getServerPortalWorker() {
 		return worker;
-    }
+	}
 
 }

@@ -200,7 +200,6 @@ class DataXceiverServer implements Runnable {
 	synchronized void attachServerPortalWorker(DataXceiver dxc) {
 		sessionToWorkerHashtable.put(dxc.getSessionServer(), dxc);
 		ServerPortalWorker spw = dxc.getServerPortalWorker();
-		dxc.setEqh(spw.eqh);
 		dxc.setServerPortalWorker(spw);
 		sp.forward(spw.sp, dxc.getSessionServer());
 		if (LOG.isDebugEnabled()) {
