@@ -8,7 +8,7 @@ export HADOOP_VERSION=$(${HADOOP_EXEC} version | head -n 1)
 export USE_UFA="-Dfs.hdfs.impl=com.mellanox.r4h.DistributedFileSystem"
 export LOG_PATH="/.autodirect/acclgwork/ufa/daily_results/R4H_${CLUSTER}_${DATE}_$(hostname)/"
 export LONG_LOG="${LOG_PATH}long_${DATE}.log"
-export TMP_JOB_LOG="/.autodirect/acclgwork/ufa/tmp/tmp_job_log.txt"
+export TMP_JOB_LOG="/tmp/tmp_job_log.txt"
 export REPORT_PATH_ERROR="${LOG_PATH}error_summary_${DATE}.txt"
 export DFS_SHEET_CSV_PATH="${LOG_PATH}testdfsio_results_${DATE}.csv"
 export DFS_SHEET_XLSX_PATH="${LOG_PATH}testdfsio_results_${DATE}.xlsx"

@@ -9,7 +9,7 @@ exportResultsToReport()
             TP=$(grep Throughput $SHORT_LOG | awk '{ print $3 }')
             TIME=$(grep "exec time" $SHORT_LOG | awk '{ print $5 }')
     else
-            echo "TestDFSIO FAILED ON ALL ${PROGRAM} ATTEMPTS -- PLACING DUMMY VALUES"
+            echo "TestDFSIO FAILED ON ALL ${PROGRAM} ATTEMPTS -- PLACING DUMMY VALUES" | tee -a ${LONG_LOG}
             TP=0
             TIME=0
     fi
@@ -20,38 +20,54 @@ exportResultsToReport()
     TIME_MIN=$(echo "$TIME" | sort -n | head -n 1)
     TIME_MAX=$(echo "$TIME" | sort -n | tail -n 1)
     TIME_AVG=$(echo "$TIME" | awk 'BEGIN{ n=0; sum=0; } { sum+=$1; n++ } END{ print sum/n }')
+    AVG_MAP_TIME=$(echo "$MAP_TIMES" | awk 'BEGIN{ n=0; sum=0; } { sum+=$1; n++ } END{ print sum/n }')
     
-    echo "${PROGRAM},${nrFiles}_files,${fileSize}MB,${TIME_MIN},${TIME_MAX},${TIME_AVG},${TP_MIN},${TP_MAX},${TP_AVG},${FAILED_ATTEMPTS},${CPU_TIMES}" >> ${DFS_SHEET_CSV_PATH}
+    echo "${PROGRAM},${nrFiles}_files,${fileSize}MB,${TIME_MIN},${TIME_MAX},${TIME_AVG},${TP_MIN},${TP_MAX},${TP_AVG},${FAILED_ATTEMPTS},${CPU_TIMES},${AVG_MAP_TIME}" >> ${DFS_SHEET_CSV_PATH}
         
 }
 
 runJob()
 {
     local USE=$1
-    HISTORY_PATH=$(echo ${HISTORY_ROOT}/done/$(date +%Y)/$(date +%m)/$(date +%d)/000000)
-
+    
     if [ -f ${TMP_JOB_LOG} ]; then
     sudo rm -rf ${TMP_JOB_LOG}
     fi
-
+    
+    FAILED_KILLED_MAPPERS=0
+    
     runDstat
     ${HADOOP_EXEC} jar $TEST_JAR TestDFSIO -Ddfs.replication=${DFS_REPLICATION} ${USE} -write -nrFiles ${nrFiles} -fileSize ${fileSize}MB -resFile $SHORT_LOG 2>&1 | tee -a $LONG_LOG ${TMP_JOB_LOG} > /dev/null
     succ=$?
     killDstat
-    sleep 30 # wait for history file    
     sudo -u hdfs hdfs dfs -chmod -R 777 ${HISTORY_ROOT}
-    HISTORY_FILE=$(${HDFS_EXEC} dfs -ls ${HISTORY_PATH} | grep .jhist | tail -1 | awk '{print $8}')
+    # sleep 30 # wait for history file    
+    # HISTORY_PATH=$(echo ${HISTORY_ROOT}/done/$(date +%Y)/$(date +%m)/$(date +%d)/000000)
+    # HISTORY_FILE=$(${HDFS_EXEC} dfs -ls ${HISTORY_PATH} | grep .jhist | tail -1 | awk '{print $8}')
+    
+    MAP_TIMES_CURR=$(grep "Total time spent by all map tasks (ms)" ${TMP_JOB_LOG} | cut -d "=" -f 2)
+    if [[ "$MAP_TIMES" == "" ]]; then
+        MAP_TIMES="${MAP_TIMES_CURR}"
+    else
+        MAP_TIMES="${MAP_TIMES} ${MAP_TIMES_CURR}"
+    fi
     
     if (($succ != 0)); then
+        echo "@@@ Job failed! @@@" | tee -a ${LONG_LOG}
         FAILED_ATTEMPTS=$((FAILED_ATTEMPTS+1))
     else
-        FAILED_KILLED_MAPPERS=$(${MAPRED_EXEC} job -history ${HISTORY_FILE} | grep -A 8 "Task Summary" | grep "Map" | awk '{print $4 + $5}')
-        FAILED_ATTEMPTS=$((FAILED_ATTEMPTS+FAILED_KILLED_MAPPERS))
+        # FAILED_KILLED_MAPPERS=$(${MAPRED_EXEC} job -history ${HISTORY_FILE} | grep -A 8 "Task Summary" | grep "Map" | awk '{print $4 + $5}')
+        FAILED_KILLED_MAPPERS=$(grep -c "Status : FAILED" ${TMP_JOB_LOG})
+        if [[ "$FAILED_KILLED_MAPPERS" != "0" ]]; then
+            echo "@@@ Got ${FAILED_KILLED_MAPPERS} failed/killed mappers! @@@" | tee -a ${LONG_LOG}
+            FAILED_ATTEMPTS=$((FAILED_ATTEMPTS+FAILED_KILLED_MAPPERS))
+        fi
     fi
 
-    APP_ID=$(grep "Submitted application" ${TMP_JOB_LOG} | awk '{ print $7 }')
+    # APP_ID=$(grep "Submitted application" ${TMP_JOB_LOG} | awk '{ print $7 }')
+    # ${YARN_EXEC} logs -applicationId ${APP_ID} > ${CONTAINER_LOGS}
+    
     rm -rf ${TMP_JOB_LOG}
-    ${YARN_EXEC} logs -applicationId ${APP_ID} > ${CONTAINER_LOGS}
     pdsh -w $SLAVES sync
 }
 
@@ -84,7 +100,7 @@ reduceDstat()
     rm -rf ${DSTAT_TMP_PATH}/*.csv
 }
 
-echo "program,numOfFiles,fileSize,min time,max time,avg time,min TP,max TP,avg TP,failed attempts,avg cpu" >> ${DFS_SHEET_CSV_PATH}
+echo "program,numOfFiles,fileSize,min time,max time,avg time,min TP,max TP,avg TP,failed attempts,avg cpu,avg map time" >> ${DFS_SHEET_CSV_PATH}
 
 echo "Changing hdfs /user permissions to 777..." | tee -a $LONG_LOG
 sudo -u hdfs ${HDFS_EXEC} dfs -chmod -R 777 /
@@ -97,8 +113,9 @@ do
         PROGRAM="UFA"
         SHORT_LOG="${LOG_PATH}short_${nrFiles}_${fileSize}_${PROGRAM}.log"
         FAILED_ATTEMPTS=0
+        MAP_TIMES=""
         if [[ "$ITERATIONS_R4H" != "0" ]]; then
-            RANGE=$(echo "$ITERATIONS_R4H" | awk '{ for(i=1;i<=$1;i++) print i;}' | tr '\n' ' ')
+            RANGE=$(seq 1 ${ITERATIONS_R4H})
             
             for i in $RANGE
             do
@@ -116,9 +133,9 @@ do
         PROGRAM="VANILLA"
         SHORT_LOG="${LOG_PATH}short_${nrFiles}_${fileSize}_${PROGRAM}.log"
         FAILED_ATTEMPTS=0
-        
+        MAP_TIMES=""
         if [[ "$ITERATIONS_VNL" != "0" ]]; then
-            RANGE=$(echo "$ITERATIONS_VNL" | awk '{ for(i=1;i<=$1;i++) print i;}' | tr '\n' ' ')
+            RANGE=$(seq 1 ${ITERATIONS_VNL})
             for j in $RANGE
             do
                 CONTAINER_LOGS="${LOG_PATH}containers_${nrFiles}_${fileSize}_${PROGRAM}_${j}.log"

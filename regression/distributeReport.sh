@@ -39,12 +39,11 @@ fi
     
 # Prepare Mail Phase
 message="<font size=6 color=blue><b>Daily R4H Regression Report</b></font><br><br><b>Date:</b> ${DATE}<br><b>Hadoop Version:</b> ${HADOOP_VERSION}<br>" 
-R4H_VERSION=$(unzip -q -c "$R4H_JAR_PATH" META-INF/MANIFEST.MF | grep "Implementation-Version" | awk '{ print $2 }')
-JXIO_VERSION=$(unzip -q -c "$JXIO_JAR_PATH" META-INF/MANIFEST.MF | egrep "Implementation-Version|Specification-Version" | awk '{ print $2 }')
-
 if [[ -n "$CLUSTER" ]]; then
     message="$message <b>Cluster:</b> ${CLUSTER}<br>"
 fi
+R4H_VERSION=`unzip -q -c "$R4H_JAR_PATH" META-INF/MANIFEST.MF | grep "Implementation-Version" | awk '{ print $2 }'`
+JXIO_VERSION=`unzip -q -c "$JXIO_JAR_PATH" META-INF/MANIFEST.MF | egrep "Implementation-Version|Specification-Version" | awk '{ print $2 }'`
 
 if [[ -n "$R4H_VERSION" ]]; then
     message="$message <b>R4H Version:</b> ${R4H_VERSION}<br>"
@@ -58,6 +57,7 @@ if [[ -n "$COMMENT_BODY" ]]; then
     message="$message <b>User Comment:</b> ${COMMENT_BODY}<br>"
 fi
 
+message="$message <b>Logs Path:</b> ${TAR_PATH}</br>"
 
 message="$message <b>Tests:</b><br>"
 message="$message <ul>"
@@ -74,7 +74,7 @@ if [[ -n "$RAN_DFSIOE" ]]; then
     message="$message <li>TestDFSIO-Enh [NumOfFiles: ${DFSIOE_FILES_NUM_SET}, FileSizes: ${DFSIOE_FILES_SIZE_SET}, Replication: ${DFS_REPLICATION}]</li>"
 fi
 message="$message </ul>"
-message="$message <br><br>Attaching reports and logs tarball.<br>"
+message="$message <br><br>Attaching reports.<br>"
 subject="${MAIL_SUBJECT}"
 
 if [[ -n "$COMMENT_SUBJECT" ]]; then
@@ -83,7 +83,7 @@ fi
 
 # Send Mail Phase
 echo "Sending mail..."
-python mailSenderUFA.py "$subject" "$message" "`date`" "$USER" "$MAILING_LIST" "${TAR_PATH}" "${DFS_SHEET_XLSX_PATH}" "${TERAGEN_SHEET_XLSX_PATH}" "${TERASORT_SHEET_XLSX_PATH}" "${DFSIOE_SHEET_XLSX_PATH}" "${REPORT_PATH_ERROR}"
+python mailSenderUFA.py "$subject" "$message" "`date`" "$USER" "$MAILING_LIST" "${DFS_SHEET_XLSX_PATH}" "${TERAGEN_SHEET_XLSX_PATH}" "${TERASORT_SHEET_XLSX_PATH}" "${DFSIOE_SHEET_XLSX_PATH}" "${REPORT_PATH_ERROR}"
 
 sleep 5
 

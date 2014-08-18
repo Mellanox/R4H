@@ -46,6 +46,7 @@ def create_chart(workbook, graph_title, x_colomn, y1_colomn, y2_colomn, name_row
    # Add a chart title and some axis labels
    chart.set_title({'name': graph_title})
    chart.set_x_axis({'name': 'File Size * File Count'})
+   chart.set_x_axis({'num_font':  {'rotation': -90}})
    chart.set_size({'width': max(600, (100 + (to_row-from_row)*12)), 'height': 384})
 
    # Set an Excel chart style. Colors with white outline and shadow
@@ -74,7 +75,7 @@ def main(argv):
 
 
    graph_title = "R4H testing"
-   headings = ['X-Axis Title', 'File Size', 'File Count', 'R4H BW [MB/s]', 'R4H BW min [MB/s]', 'R4H BW max [MB/s]', 'R4H [Failed]', 'Vanilla BW [MB/s]', 'Vanilla BW min [MB/s]', 'Vanilla BW max [MB/s]', 'Vanilla [Failed]', 'R4H [sec]', 'R4H min [sec]', 'R4H max [sec]', 'Vanilla [sec]', 'Vanilla min [sec]', 'Vanilla max [sec]', 'R4H [AVG CPU %]', 'Vanilla [AVG CPU %]', 'R4H Total BW [MB/s]', 'Vanilla Total BW [MB/s]', 'R4H [CPU*time]', 'Vanilla [CPU*time]']
+   headings = ['X-Axis Title', 'File Size', 'File Count', 'R4H BW [MB/s]', 'R4H BW min [MB/s]', 'R4H BW max [MB/s]', 'R4H [Failed]', 'Vanilla BW [MB/s]', 'Vanilla BW min [MB/s]', 'Vanilla BW max [MB/s]', 'Vanilla [Failed]', 'R4H [sec]', 'R4H min [sec]', 'R4H max [sec]', 'Vanilla [sec]', 'Vanilla min [sec]', 'Vanilla max [sec]', 'R4H [AVG CPU %]', 'Vanilla [AVG CPU %]', 'R4H Total BW [MB/s]', 'Vanilla Total BW [MB/s]', 'R4H [CPU*time]', 'Vanilla [CPU*time]', 'R4H [ms]', 'Vanilla [ms]']
    line = 0
    filecount = str()
    filesize = str()
@@ -117,6 +118,7 @@ def main(argv):
       bw_value =        row[8]
       failed_attempts = row[9]
       avg_cpu =         row[10].strip()
+      avg_maps_time =       float(row[11].strip())
       if (filesize != row[2] or filecount != row[1]):
          filesize = row[2]
          filecount = row[1]
@@ -142,6 +144,8 @@ def main(argv):
          worksheet.write_number(line, 12, float(time_value_min), num_format)
          worksheet.write_number(line, 13, float(time_value_max), num_format)
          worksheet.write_number(line, 17, float_avg_cpu, num_format)
+         worksheet.write_number(line, 23, avg_maps_time, num_format)
+         
          # Replaces formulas
          worksheet.write_number(line, 19, filecount_float*float_bw_value,num_format)
          worksheet.write_number(line, 21, float_time_value*float_avg_cpu,num_format)
@@ -156,6 +160,7 @@ def main(argv):
          worksheet.write_number(line, 15, float(time_value_min), num_format)
          worksheet.write_number(line, 16, float(time_value_max), num_format)
          worksheet.write_number(line, 18, float(avg_cpu), num_format)
+         worksheet.write_number(line, 24, avg_maps_time, num_format)
          # Replaces formulas
          worksheet.write_number(line, 20,filecount_float*float_bw_value,num_format)
          worksheet.write_number(line, 22,float_time_value*float_avg_cpu,num_format)
@@ -176,27 +181,30 @@ def main(argv):
    # Create BW chart
    chart1 = create_chart(workbook, "R4H vs. Vanilla (AVG BW)", 'A', 'D', 'H', 1, 2, line, uda_error_max, uda_error_min, vanilla_error_max, vanilla_error_min)
    # Insert the chart into the worksheet (with an offset)
-   worksheet.insert_chart('A10', chart1, {'x_offset': 10, 'y_offset': 10})
+   worksheet.insert_chart('A'+str(line+1), chart1, {'x_offset': 10, 'y_offset': 10})
 
    # Create Time chart
    chart2 = create_chart(workbook, "R4H vs. Vanilla (Time)", 'A', 'L', 'O', 1, 2, line)
    # Insert the chart into the worksheet (with an offset)
-   worksheet.insert_chart('A30', chart2, {'x_offset': 10, 'y_offset': 10})
+   worksheet.insert_chart('A'+str(line+21), chart2, {'x_offset': 10, 'y_offset': 10})
    
    # Create CPU chart
    chart3 = create_chart(workbook, "R4H vs. Vanilla (AVG CPU Usage)", 'A', 'R', 'S', 1, 2, line)
    # Insert the chart into the worksheet (with an offset)
-   worksheet.insert_chart('A50', chart3, {'x_offset': 10, 'y_offset': 10})
+   worksheet.insert_chart('A'+str(line+41), chart3, {'x_offset': 10, 'y_offset': 10})
    
    # Create Total BW chart
    chart4 = create_chart(workbook, "R4H vs. Vanilla (Total BW)", 'A', 'T', 'U', 1, 2, line)
    # Insert the chart into the worksheet (with an offset)
-   worksheet.insert_chart('A70', chart4, {'x_offset': 10, 'y_offset': 10})
+   worksheet.insert_chart('A'+str(line+61), chart4, {'x_offset': 10, 'y_offset': 10})
    
    # Create Total CPU chart
    chart5 = create_chart(workbook, "R4H vs. Vanilla (Total CPU Usage)", 'A', 'V', 'W', 1, 2, line)
    # Insert the chart into the worksheet (with an offset)
-   worksheet.insert_chart('A90', chart5, {'x_offset': 10, 'y_offset': 10})
+   worksheet.insert_chart('A'+str(line+81), chart5, {'x_offset': 10, 'y_offset': 10})
+   
+   chart6 = create_chart(workbook, "R4H vs. Vanilla (Avg Agg Map Time MS)", 'A', 'X', 'Y', 1, 2, line)
+   worksheet.insert_chart('A'+str(line+101), chart6, {'x_offset': 10, 'y_offset': 10})
    
    workbook.close()
 
