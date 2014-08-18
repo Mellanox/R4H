@@ -23,6 +23,8 @@ import java.nio.ByteBuffer;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -48,6 +50,8 @@ public class ServerPortalWorker implements Worker {
 	private final int msgInSize;
 	private final int numOfMsgsToBind;
 	private volatile boolean isFree = false;
+	private ExecutorService packetAsyncIOExecutor = Executors.newSingleThreadExecutor();
+
 
 	private final Callbacks onDynamicMsgPoolAllocation = new EventQueueHandler.Callbacks() {
 
@@ -168,4 +172,8 @@ public class ServerPortalWorker implements Worker {
 	void setFree(boolean isFree) {
 		this.isFree = isFree;
 	}
+
+	ExecutorService getPacketAsyncIOExecutor() {
+	    return packetAsyncIOExecutor;
+    }
 }

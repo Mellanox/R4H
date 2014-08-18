@@ -281,7 +281,7 @@ class DataXceiver extends Receiver {
 		this.dxcs = dxcs;
 		this.worker = spw;
 		this.dnBridge = dxcs.dnBridge;
-		this.packetAsyncIOExecutor = Executors.newSingleThreadExecutor(); // TODO: get from pool ?
+		this.packetAsyncIOExecutor = spw.getPacketAsyncIOExecutor();
 		this.uri = sKey.getUri();
 		DataXceiver.SSCallbacks ssCbs = this.new SSCallbacks();
 		serverSession = new ServerSession(sKey, ssCbs);
