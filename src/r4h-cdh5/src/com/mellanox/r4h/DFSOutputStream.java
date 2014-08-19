@@ -144,11 +144,11 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 	// The client session. A new client session is created per block.
 	private ClientSession clientSession;
 	// The event queue handler. We have only one such, and reuse it for all blocks.
-	private R4HEventHandler eventQHandler = new R4HEventHandler(null, true);
+	private R4HEventHandler eventQHandler;
 	// The name of next DN node we're talking to (we hold it here for logging purposes only).
 	private String nextDnName;
 	// The message pool that is used for connection to data nodes.
-	private MsgPool msgPool = null;
+	private final MsgPool msgPool;
 	// First reply comes always from the header. Later replies come from messages. This flag is being reset for every block.
 	private boolean isHeaderAck = true;
 	// The pipeline status, moved here following other changes.
@@ -170,6 +170,7 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 
 	private final DFSClient dfsClient;
 	private static final int MAX_PACKETS = 80; // each packet 64K, total 5MB
+	private static final long CLOSE_WAIT_TIMEOUT_IN_USEC = 100000; // very sensitive and might affect significantly job duration
 	private Socket s;
 	// closed is accessed by different threads under different locks.
 	private volatile boolean closed = false;
@@ -198,6 +199,8 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 	private boolean shouldSyncBlock = false; // force blocks to disk upon close
 	private AtomicReference<CachingStrategy> cachingStrategy;
 	private boolean failPacket = false;
+	private final JXIOClientResource jxioResource;
+	private boolean usingJxioClientResource = true;
 
 	private class Packet {
 		long seqno; // sequencenumber of buffer in block
@@ -1042,7 +1045,17 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 		}
 
 		private void closeInternal() {
-			DFSOutputStream.this.eventQHandler.close();
+			if (!wasLastSessionClosed) {
+				long start = System.nanoTime();
+				DFSOutputStream.this.eventQHandler.runEventLoop(1, CLOSE_WAIT_TIMEOUT_IN_USEC); 
+				long durationUsec = (System.nanoTime() - start) / 1000;
+				if (!wasLastSessionClosed) {
+					LOG.error("Did not receive client session closed event");
+				}
+				if (durationUsec >= CLOSE_WAIT_TIMEOUT_IN_USEC) {
+					LOG.warn(String.format("Spent %d milliSec waiting for session close", durationUsec / 1000));
+				}
+			}
 			closeStream();
 			streamerClosed = true;
 			closed = true;
@@ -1899,6 +1912,11 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 		this.blockReplication = stat.getReplication();
 		this.progress = progress;
 		this.cachingStrategy = new AtomicReference<CachingStrategy>(dfsClient.getDefaultWriteCachingStrategy());
+		this.jxioResource = dfsClient.getJXIOResource();
+		this.usingJxioClientResource = true;
+		this.eventQHandler = jxioResource.getEqh();
+		this.msgPool = jxioResource.getMsgPool();
+
 		if ((progress != null) && DFSOutputStream.LOG.isDebugEnabled()) {
 			DFSOutputStream.LOG.debug("Set non-null progress callback on DFSOutputStream " + src);
 		}
@@ -1911,21 +1929,6 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 		}
 		this.name = String.format("[hash=%X] ", DFSOutputStream.this.hashCode());
 		this.checksum = checksum;
-		if (this.msgPool == null) {
-			int poolNumOfMsgs = R4HProtocol.MAX_DATA_QUEUE_PACKETS + R4HProtocol.CLIENT_MSGPOOL_SPARE;
-			int poolInSize = R4HProtocol.ACK_SIZE;
-			int poolOutSize = dfsClient.getConf().getWritePacketSize() + R4HProtocol.JX_BUF_SPARE;
-
-			if (LOG.isTraceEnabled()) {
-				LOG.trace("Creating JXIO message pool with " + poolNumOfMsgs + " packets, in size " + poolInSize + ", out size " + poolOutSize);
-			}
-
-			this.msgPool = new MsgPool(poolNumOfMsgs, poolInSize, poolOutSize);
-
-			if (LOG.isTraceEnabled()) {
-				LOG.trace(DFSOutputStream.this.toString() + "Created msg pool: " + this.msgPool.toString());
-			}
-		}
 
 		if (toPrintBreakdown) {
 			long now = System.nanoTime();
@@ -2382,6 +2385,11 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 	 */
 	synchronized void abort() throws IOException {
 		if (closed) {
+			if (usingJxioClientResource) {
+				this.eventQHandler = null;
+				dfsClient.returnJXIOResource(jxioResource);
+				usingJxioClientResource = false;
+			}
 			return;
 		}
 		streamer.setLastException(new IOException("Lease timeout of " + (dfsClient.getHdfsTimeout() / 1000) + " seconds expired."));
@@ -2404,6 +2412,9 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 			streamer = null;
 			s = null;
 			closed = true;
+			this.eventQHandler = null;
+			dfsClient.returnJXIOResource(jxioResource);
+			usingJxioClientResource = false;
 		}
 	}
 
@@ -2414,6 +2425,11 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 	@Override
 	public synchronized void close() throws IOException {
 		if (closed) {
+			if (usingJxioClientResource) {
+				this.eventQHandler = null;
+				dfsClient.returnJXIOResource(jxioResource);
+				usingJxioClientResource = false;
+			}
 			IOException e = lastException.getAndSet(null);
 			if (e == null)
 				return;

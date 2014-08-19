@@ -84,6 +84,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.SynchronousQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -204,6 +205,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.net.InetAddresses;
+import com.mellanox.jxio.MsgPool;
 import com.mellanox.r4h.client.HdfsDataInputStream;
 import com.mellanox.r4h.client.HdfsDataOutputStream;
 
@@ -250,6 +252,8 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory {
 	private volatile long hedgedReadThresholdMillis;
 	private static final DFSHedgedReadMetrics HEDGED_READ_METRIC = new DFSHedgedReadMetrics();
 	private static ThreadPoolExecutor HEDGED_READ_THREAD_POOL;
+	private ConcurrentLinkedQueue<JXIOClientResource> jxioResourcesQueue = new ConcurrentLinkedQueue<JXIOClientResource>();
+	
 
 	public DFSClientConfBridge getConf() {
 		return dfsClientConf;
@@ -623,8 +627,18 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory {
 			getLeaseRenewer().closeClient(this);
 			// close connections to the namenode
 			closeConnectionToNamenode();
+			releaseJxioResources();
 		}
 	}
+
+	private void releaseJxioResources() {
+		JXIOClientResource res = jxioResourcesQueue.poll();
+		while (res != null) {
+			res.getEqh().close();
+			res.getMsgPool().deleteMsgPool();
+			res = jxioResourcesQueue.poll();
+		}
+    }
 
 	/**
 	 * Get the default block size for this cluster
@@ -1155,6 +1169,36 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory {
 		        buffersize, dfsClientConf.createChecksum(checksumOpt), favoredNodeStrs);
 		beginFileLease(src, result);
 		return result;
+	}
+
+	JXIOClientResource getJXIOResource() {
+		JXIOClientResource res = jxioResourcesQueue.poll();
+		if (res == null) {
+			int poolOutSize = getConf().getWritePacketSize() + R4HProtocol.JX_BUF_SPARE;
+
+			if (LOG.isTraceEnabled()) {
+				LOG.trace("Creating JXIO message pool with " + R4HProtocol.CLIENT_MSG_POOL_NUM_MSGS + " packets, in size " + R4HProtocol.CLIENT_MSG_POOL_IN_SIZE + ", out size " + poolOutSize);
+			}
+
+			MsgPool msgPool = new MsgPool(R4HProtocol.CLIENT_MSG_POOL_NUM_MSGS, R4HProtocol.CLIENT_MSG_POOL_IN_SIZE, poolOutSize);
+
+			if (LOG.isTraceEnabled()) {
+				LOG.trace("Created msg pool: " + msgPool);
+			}
+			
+			R4HEventHandler eqh = new R4HEventHandler(null, true); //TODO: just copied to TRUE for ignoring breakEventLoop but WHY to ignore ???
+			
+			res = new JXIOClientResource(eqh, msgPool);
+		} else if (LOG.isDebugEnabled()){
+			LOG.debug("Using cached JXIO resources");
+		}
+		
+		
+		return res;
+    }
+	
+	void returnJXIOResource(JXIOClientResource jxioResource) {
+		jxioResourcesQueue.add(jxioResource);
 	}
 
 	/**

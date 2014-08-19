@@ -26,10 +26,13 @@ public class R4HProtocol {
 	public static final int MAX_DATA_QUEUE_PACKETS = 80; // 80 * 64K = 5MB
 	public static final int JX_SERVER_SPARE_MSGS = 8;
 	public static final int JX_BUF_SPARE = 128;
-	public static final int CLIENT_MSGPOOL_SPARE = 8;
 	public static final int SERVER_MSG_POOL_SIZE = MAX_SEND_PACKETS + JX_SERVER_SPARE_MSGS;
 	public static final int MSG_POOLS_GROWTH_FACTOR = 10;
 	private static final int CLIENT_HASH_LENGTH = 8; // In characters
+	public static final int CLIENT_MSGPOOL_SPARE = 8;
+	static final int CLIENT_MSG_POOL_NUM_MSGS = MAX_DATA_QUEUE_PACKETS + CLIENT_MSGPOOL_SPARE;
+	static final int CLIENT_MSG_POOL_IN_SIZE = ACK_SIZE;
+
 
 	public static String createSessionHash() {
 		long tid = Thread.currentThread().getId();
