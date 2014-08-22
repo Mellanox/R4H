@@ -176,4 +176,8 @@ public class ServerPortalWorker implements Worker {
 	ExecutorService getPacketAsyncIOExecutor() {
 	    return packetAsyncIOExecutor;
     }
+
+	protected void clearAsyncOprQueue() {
+		this.asyncOprQueue.clear();
+    }
 }

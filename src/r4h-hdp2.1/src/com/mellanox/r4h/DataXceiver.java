@@ -135,6 +135,7 @@ class DataXceiver extends Receiver {
 			        serverSession.getIsClosing(), (clientSession != null) ? clientSession.getIsClosing() : null));
 			onFlightMsgs.remove(msg);
 			// TODO: sendReply(NACK) ? or ss.close() ?
+			DataXceiver.this.close();
 			return releaseMsg;
 		}
 
@@ -228,9 +229,7 @@ class DataXceiver extends Receiver {
 		@Override
 		public void onMsgError(Msg msg, EventReason reason) {
 			LOG.error(String.format("Mirror client got msg error:  reason=%s ss=%s sc=%s", reason, serverSession, clientSession));
-			if ((serverSession != null) && (!serverSession.getIsClosing())) {
-				serverSession.close();
-			}
+			DataXceiver.this.close();
 		}
 
 		@Override
@@ -698,15 +697,17 @@ class DataXceiver extends Receiver {
 	}
 
 	void close() {
+		this.serverPortalWorker.clearAsyncOprQueue();
 		if ((DataXceiver.this.clientSession != null) && (!DataXceiver.this.clientSession.getIsClosing())) {
+			LOG.info("Closing mirror client session: " + DataXceiver.this.clientSession);
 			clientSessionCloseEventExpected = true;
 			DataXceiver.this.clientSession.close();
 		}
 
 		if ((serverSession != null) && (!serverSession.getIsClosing())) {
+			LOG.info("Closing server session: " + DataXceiver.this.serverSession);
 			serverSession.close();
 		}
-		// TODO: remove it from DXCServer's dxcList!
 	}
 
 	@Override
@@ -824,8 +825,10 @@ class DataXceiver extends Receiver {
 
 				@Override
 				public void run() {
-					clientSessionCloseEventExpected = true;
-					cs.close();
+					if (!cs.getIsClosing()) {
+						clientSessionCloseEventExpected = true;
+						cs.close();
+					}
 				}
 			});
 		}
@@ -850,5 +853,4 @@ class DataXceiver extends Receiver {
 	ServerPortalWorker getServerPortalWorker() {
 		return worker;
 	}
-
 }
