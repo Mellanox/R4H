@@ -44,8 +44,8 @@ fi
 echo -e "$prefix: ${UNDERLINE}Building HDFS JAR...${NONE}"
 echo "$prefix: cd .."
 cd ..
-echo "$prefix: ant"
-ant
+echo "$prefix: ant $1"
+ant $1
 
 if (($? != 0)); then
         echo -e "$prefix: ${RED}ERROR Building HDFS JAR - Exiting${NONE}"
