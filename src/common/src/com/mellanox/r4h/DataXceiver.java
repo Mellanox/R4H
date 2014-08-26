@@ -131,8 +131,8 @@ class DataXceiver extends Receiver {
 		@Override
 		public boolean onMsgError(Msg msg, EventReason reason) {
 			boolean releaseMsg = true; // Always return the message to server's bound pool
-			LOG.error(String.format("Msg error: MSG=%s reason=%s ss=%s ss.isClosing=%s cs.isClosing=%s", msg, reason, serverSession,
-			        serverSession.getIsClosing(), (clientSession != null) ? clientSession.getIsClosing() : null));
+			LOG.error(String.format("Server Msg error: MSG=%s reason=%s ss=%s ss.isClosing=%s cs=%s cs.isClosing=%s", msg, reason, serverSession,
+			        serverSession.getIsClosing(), clientSession, (clientSession != null) ? clientSession.getIsClosing() : null));
 			onFlightMsgs.remove(msg);
 			// TODO: sendReply(NACK) ? or ss.close() ?
 			DataXceiver.this.close();
@@ -228,7 +228,8 @@ class DataXceiver extends Receiver {
 
 		@Override
 		public void onMsgError(Msg msg, EventReason reason) {
-			LOG.error(String.format("Mirror client got msg error:  reason=%s ss=%s sc=%s", reason, serverSession, clientSession));
+			LOG.error(String.format("Client Msg error: MSG=%s reason=%s ss=%s ss.isClosing=%s cs=%s cs.isClosing=%s", msg, reason, serverSession,
+			        serverSession.getIsClosing(), clientSession, (clientSession != null) ? clientSession.getIsClosing() : null));
 			DataXceiver.this.close();
 		}
 
