@@ -1,2 +1,16 @@
 build
+hadoop-2.0.0-cdh4.4.0-SNAPSHOT/
+hadoop-2.3.0-cdh5.0.2/
+hadoop-2.3.0-src/
+hadoop-source-2.4.0.-HDP-2.1.2.0-402/
+src/common/bin/
+src/r4h-cdh4.4/.classpath
+src/r4h-cdh4.4/.project
+src/r4h-cdh5/.classpath
+src/r4h-cdh5/.project
+src/r4h-hdp2.1/.classpath
+src/r4h-hdp2.1/.project
+src/r4h-hdp2.1/bin/
+src/r4h-hdp2.1/common
+
 
