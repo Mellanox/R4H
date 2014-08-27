@@ -1182,7 +1182,7 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory {
 				LOG.trace("Created msg pool: " + msgPool);
 			}
 			
-			R4HEventHandler eqh = new R4HEventHandler(null, true); //TODO: just copied to TRUE for ignoring breakEventLoop but WHY to ignore ???
+			R4HEventHandler eqh = new R4HEventHandler(null, false);
 			
 			res = new JXIOClientResource(eqh, msgPool);
 		} else if (LOG.isDebugEnabled()){

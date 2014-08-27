@@ -166,6 +166,8 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 	private String name; // used as the toString value
 	// Is used to ensure we get session close event in the end of last block.
 	private boolean wasLastSessionClosed = false;
+	// Indicates whether encountered an error in the middle of operation. In such case we strive to EXIT as soon as possible.
+	private boolean errorFlowInTheMiddle = false;
 	// R4H stuff ends here.
 
 	private final DFSClient dfsClient;
@@ -635,6 +637,8 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 		 * eqh.runeventloop().
 		 */
 		public void onSessionEvent(EventName session_event, EventReason reason) {
+			boolean errorFlow = false;
+
 			switch (session_event) {
 				case SESSION_CLOSED:
 					wasLastSessionClosed = true;
@@ -645,10 +649,12 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 						}
 					} else {
 						DFSOutputStream.LOG.error(DFSOutputStream.this.toString() + logmsg);
+						errorFlow = true;
 					}
 					break;
 				case SESSION_ERROR:
 				case SESSION_REJECT:
+					errorFlow = true;
 					if (isHeaderAck) {
 						didHeaderFail = true;
 						DFSOutputStream.LOG.error(DFSOutputStream.this.toString()
@@ -666,6 +672,10 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 				default:
 					break;
 			}
+			if (errorFlow) {
+				errorFlowInTheMiddle = true;
+				DFSOutputStream.this.eventQHandler.breakEventLoop();
+			}
 		}
 
 		/**
@@ -675,9 +685,6 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 		@Override
 		public void onMsgError(Msg msg, EventReason reason) {
 			msg.returnToParentPool();
-			// TODO: this.close() ? - recover ?
-			// TODO: set clientSession to null after closing it and check if null everywhere.
-			// This will solve the bug when more than one message has error and so the client session is closed more than once.
 			DFSOutputStream.LOG.error(DFSOutputStream.this.toString()
 			        + String.format("Msg error occurred: reason=%s, countPacketArrived=%d", reason, countPacketArrived));
 			if (clientSession != null) {
@@ -685,6 +692,8 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 				clientSession = null;
 				closeEventExpected = true;
 			}
+			errorFlowInTheMiddle = true;
+			DFSOutputStream.this.eventQHandler.breakEventLoop();
 		}
 	}
 
@@ -876,7 +885,6 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 						        + dfsClient.clientRunning + ", doSleep:" + doSleep);
 					}
 
-					DFSOutputStream.this.eventQHandler.setIgnoreBreak(true);
 					while ((!streamerClosed && !hasError && dfsClient.clientRunning && ((dataQueue.isEmpty()) || (ackQueue.size() >= ACK_Q_THRESHOLD_HIGH)))
 					        || doSleep) {
 
@@ -888,24 +896,22 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 						}
 
 						if (eventsToProcess <= 0) {
-							// dataQ&ackQ are empty - going to wait on 'runEventLoop' for user to insert new packet to dataQ and break the loop
-							// eventsToProcess = 1;
-							// DFSOutputStream.this.eventQHandler.setIgnoreBreak(false);
+							// dataQ&ackQ are empty - going to wait on dataQ for user to insert new packet
 							synchronized (dataQueue) {
 								if (dataQueue.isEmpty() && !streamerClosed && !hasError && dfsClient.clientRunning) {
 									dataQueue.wait();
 								}
 							}
 						} else {
-							DFSOutputStream.this.eventQHandler.setIgnoreBreak(true);
-
 							if (LOG.isTraceEnabled()) {
 								LOG.trace("Going to run event loop with " + eventsToProcess + " events to process.");
 							}
 
 							DFSOutputStream.this.eventQHandler.runEventLoop(eventsToProcess, 10 * 1000);
-							// DFSOutputStream.this.eventQHandler.runEventLoop(eventsToProcess, -1); worked
-							DFSOutputStream.this.eventQHandler.setIgnoreBreak(true);
+							if (errorFlowInTheMiddle) {
+								DFSOutputStream.this.eventQHandler.setIgnoreBreak(true);
+								throw new IOException("Error in message/session while running streamer, client cannot continue.");
+							}
 							doSleep = false;
 						}
 					}
@@ -921,8 +927,6 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 							LOG.trace("Fetched a packet from dataQ.");
 						}
 					} else {
-						// Do not send hb packt
-						// one = new Packet(); // heartbeat packet
 						continue;
 					}
 
@@ -1012,12 +1016,14 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 						// wait for the close packet has been acked
 
 						while (!hasError && !wasLastPacketAcked && dfsClient.clientRunning) {
-							// DFSOutputStream.this.eventQHandler.runEventLoop(1, 100 * 1000);
 							DFSOutputStream.this.eventQHandler.runEventLoop(1, 1);
+							if (errorFlowInTheMiddle) {
+								throw new IOException(
+								        "Error in message/session while waiting for last packet ack in streamer, client cannot continue.");
+							}
 						}
 						waslpib = wasLastPacketAcked;
 						wasLastPacketAcked = false; // reset for next block
-						stage = BlockConstructionStage.PIPELINE_CLOSE;
 
 						if (streamerClosed || hasError || !dfsClient.clientRunning) {
 							continue;
@@ -1047,7 +1053,7 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 		private void closeInternal() {
 			if (!wasLastSessionClosed) {
 				long start = System.nanoTime();
-				DFSOutputStream.this.eventQHandler.runEventLoop(1, CLOSE_WAIT_TIMEOUT_IN_USEC); 
+				DFSOutputStream.this.eventQHandler.runEventLoop(1, CLOSE_WAIT_TIMEOUT_IN_USEC);
 				long durationUsec = (System.nanoTime() - start) / 1000;
 				if (!wasLastSessionClosed) {
 					LOG.error("Did not receive client session closed event");
@@ -1545,6 +1551,30 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 			return lb;
 		}
 
+		/*
+		 * Check whether client session was established.
+		 * Runs the event loop and checks whether we encountered an error flow.
+		 * 
+		 * @param clientSessionCallbacks
+		 * The callbacks that hold the client session.
+		 * 
+		 * @param eventLoopRunDurationUsec
+		 * For how many uSeconds to run the event loop.
+		 * 
+		 * @return
+		 * true if everything is ok, false otherwise.
+		 */
+		private boolean checkWasClientSessionEstablished(CSCallbacks clientSessionCallbacks, int eventLoopRunDurationUsec) {
+			if (!clientSessionCallbacks.wasSessionEstablished) {
+				DFSOutputStream.this.eventQHandler.runEventLoop(1, eventLoopRunDurationUsec);
+				if (errorFlowInTheMiddle) {
+					LOG.fatal("Error in message/session while waiting for session establishment, client cannot continue.");
+					return false;
+				}
+			}
+			return true;
+		}
+
 		// connects to the first datanode in the pipeline
 		// Returns true if success, otherwise return failure.
 		//
@@ -1613,16 +1643,19 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 
 					wasLastSessionClosed = false;
 					DFSOutputStream.this.clientSession = new ClientSession(eventQHandler, uri, clientSessionCallbacks);
-					if (!clientSessionCallbacks.wasSessionEstablished) {
-						DFSOutputStream.this.eventQHandler.runEventLoop(1, 1000);
+					final int eventLoopRunDurationUsec = 1000;
+
+					if (!checkWasClientSessionEstablished(clientSessionCallbacks, eventLoopRunDurationUsec)) {
+						return false;
 					}
+
 					//
 					// Xmit header info to datanode
 					//
 					Msg message = getMsg();
 					out = new DataOutputStream(new BufferedOutputStream(new ByteBufferOutputStream(message.getOut()), 512));
-					if (!clientSessionCallbacks.wasSessionEstablished) {
-						DFSOutputStream.this.eventQHandler.runEventLoop(1, 1000);
+					if (!checkWasClientSessionEstablished(clientSessionCallbacks, eventLoopRunDurationUsec)) {
+						return false;
 					}
 
 					if (toPrintBreakdown) {
@@ -1661,8 +1694,8 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 					}
 
 					out.flush();
-					if (!clientSessionCallbacks.wasSessionEstablished) {
-						DFSOutputStream.this.eventQHandler.runEventLoop(1, 1000);
+					if (!checkWasClientSessionEstablished(clientSessionCallbacks, eventLoopRunDurationUsec)) {
+						return false;
 					}
 
 					if (toPrintBreakdown) {
@@ -1678,8 +1711,8 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 					R4HProtocol.wrappedSendRequest(DFSOutputStream.this.clientSession, message, LOG);
 					long now2 = System.nanoTime();
 
-					if (!clientSessionCallbacks.wasSessionEstablished) {
-						DFSOutputStream.this.eventQHandler.runEventLoop(1, 1000);
+					if (!checkWasClientSessionEstablished(clientSessionCallbacks, eventLoopRunDurationUsec)) {
+						return false;
 					}
 
 					if (toPrintBreakdown) {
@@ -1702,6 +1735,10 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 					while (isHeaderAck) {
 						loops++;
 						events += DFSOutputStream.this.eventQHandler.runEventLoop(1, -1);
+						if (errorFlowInTheMiddle) {
+							LOG.fatal("Error in message/session while waiting for header ack, client cannot continue.");
+							return false;
+						}
 					}
 
 					if (DFSOutputStream.LOG.isDebugEnabled()) {
@@ -1713,7 +1750,7 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 
 					if (didHeaderFail) {
 						DFSOutputStream.LOG.warn(DFSOutputStream.this.toString()
-						        + String.format("Header failed (packets arrived=%d, nodes.len=%d, errorIndex=%d, lastRunEvLoopWait=%d)",
+						        + String.format("Header failed (packets arrived=%d, nodes.len=%d, errorIndex=%d)",
 						                clientSessionCallbacks.countPacketArrived, nodes.length, errorIndex));
 						currResult = false;
 						// find the datanode that matches
@@ -1736,7 +1773,7 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 
 					DFSOutputStream.LOG.debug(DFSOutputStream.this.toString()
 					        + String.format("createBlockOutputStream retunrs with: currResult=%b, isHeaderAck=%b", currResult, isHeaderAck));
-					return currResult && !isHeaderAck; // TODO: clearify varibales names to be readable
+					return currResult && !isHeaderAck; // TODO: clearify variables names to be readable
 
 				} catch (IOException ie) {
 					if (restartingNodeIndex == -1) {
