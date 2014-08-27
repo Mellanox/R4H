@@ -325,53 +325,54 @@ class DataXceiver extends Receiver {
 		oprHeader.getBlock().setNumBytes(dnBridge.getEstimateBlockSize());
 		LOG.info("Receiving " + oprHeader.getBlock() + " src: " + uri);
 
-		// reply to upstream datanode or client
-		final OutputStream replyOut = new ByteBufferOutputStream(currMsg.getOut());
-		checkAccess(replyOut, oprHeader.isClient(), oprHeader.getBlock(), oprHeader.getBlockToken(), Op.WRITE_BLOCK,
+		boolean isTokenAccessOk = checkAccess(oprHeader.isClient(), oprHeader.getBlock(), oprHeader.getBlockToken(), Op.WRITE_BLOCK,
 		        BlockTokenSecretManager.AccessMode.WRITE);
 
-		if (oprHeader.isDatanode() || oprHeader.getStage() != BlockConstructionStage.PIPELINE_CLOSE_RECOVERY) {
-			// open a block receiver
-			try {
-				blockReceiver = new BlockReceiverBridge(serverPortalWorker, oprHeader, in, serverSession.toString(), dnBridge, packetAsyncIOExecutor);
-				blockReceiver.setAsyncFileOutputStreams();
-			} catch (SecurityException | NoSuchFieldException | IllegalArgumentException | IllegalAccessException | NoSuchMethodException e) {
-				throw new IOException("Failed on BlockReceiver creation", e);
-			}
+		if (isTokenAccessOk) {
 
-			if (LOG.isTraceEnabled()) {
-				LOG.trace("After BlockReceiver creation: " + blockReceiver);
-			}
-
-		} else {
-			dnBridge.recoverClose(oprHeader.getBlock(), oprHeader.getLatestGenerationStamp(), oprHeader.getMinBytesRcvd());
-		}
-
-		//
-		// Connect to downstream machine, if appropriate
-		//
-		if (hasPipeline()) {
-			try {
-				blockReceiver.setMirrorOut(new DummyDataOutputStream()); // we send to pipeline with RDMA and then keep using vanila's original
-				                                                         // receivePacket function by modifying mirror stream with dummy stream to
-				                                                         // avoid sending to pipeline from vanila's flow
-				openPipelineConnection();
-				sendOprHeaderToPipeline(msg, originalBlock);
-			} catch (Exception e) {
-				if (oprHeader.isClient()) {
-					replyHeaderAck(msg, ERROR, oprHeader.getTargetByIndex(0).getXferAddr());
-					// NB: Unconditionally using the xfer addr w/o hostname
-					LOG.error(dnBridge.getDN() + ":Exception transfering block " + oprHeader.getBlock() + " to mirror "
-					        + oprHeader.getTargetByIndex(0).getInfoAddr() + ": " + StringUtils.stringifyException(e));
-				} else {
-					LOG.info(dnBridge.getDN() + ":Exception transfering " + oprHeader.getBlock() + " to mirror "
-					        + oprHeader.getTargetByIndex(0).getInfoAddr() + "- continuing without the mirror", e);
+			if (oprHeader.isDatanode() || oprHeader.getStage() != BlockConstructionStage.PIPELINE_CLOSE_RECOVERY) {
+				// open a block receiver
+				try {
+					blockReceiver = new BlockReceiverBridge(serverPortalWorker, oprHeader, in, serverSession.toString(), dnBridge,
+					        packetAsyncIOExecutor);
+					blockReceiver.setAsyncFileOutputStreams();
+				} catch (SecurityException | NoSuchFieldException | IllegalArgumentException | IllegalAccessException | NoSuchMethodException e) {
+					throw new IOException("Failed on BlockReceiver creation", e);
 				}
-			}
-		} else if (oprHeader.isClient() && !oprHeader.isTransfer()) {
-			replyHeaderAck(msg);
-		}
 
+				if (LOG.isTraceEnabled()) {
+					LOG.trace("After BlockReceiver creation: " + blockReceiver);
+				}
+
+			} else {
+				dnBridge.recoverClose(oprHeader.getBlock(), oprHeader.getLatestGenerationStamp(), oprHeader.getMinBytesRcvd());
+			}
+
+			//
+			// Connect to downstream machine, if appropriate
+			//
+			if (hasPipeline()) {
+				try {
+					blockReceiver.setMirrorOut(new DummyDataOutputStream()); // we send to pipeline with RDMA and then keep using vanila's original
+					                                                         // receivePacket function by modifying mirror stream with dummy stream to
+					                                                         // avoid sending to pipeline from vanila's flow
+					openPipelineConnection();
+					sendOprHeaderToPipeline(msg, originalBlock);
+				} catch (Exception e) {
+					if (oprHeader.isClient()) {
+						replyHeaderAck(msg, ERROR, oprHeader.getTargetByIndex(0).getXferAddr());
+						// NB: Unconditionally using the xfer addr w/o hostname
+						LOG.error(dnBridge.getDN() + ":Exception transfering block " + oprHeader.getBlock() + " to mirror "
+						        + oprHeader.getTargetByIndex(0).getInfoAddr() + ": " + StringUtils.stringifyException(e));
+					} else {
+						LOG.info(dnBridge.getDN() + ":Exception transfering " + oprHeader.getBlock() + " to mirror "
+						        + oprHeader.getTargetByIndex(0).getInfoAddr() + "- continuing without the mirror", e);
+					}
+				}
+			} else if (oprHeader.isClient() && !oprHeader.isTransfer()) {
+				replyHeaderAck(msg);
+			}
+		}
 		isFirstRequest = false;
 	}
 
@@ -736,7 +737,7 @@ class DataXceiver extends Receiver {
 	}
 
 	// TODO: this method is copied from original DXC. Need to consider reuse instead, maybe by inheritance+reflection
-	private void checkAccess(OutputStream out, final boolean reply, final ExtendedBlock blk, final Token<BlockTokenIdentifier> t, final Op op,
+	private boolean checkAccess(final boolean reply, final ExtendedBlock blk, final Token<BlockTokenIdentifier> t, final Op op,
 	        final BlockTokenSecretManager.AccessMode mode) throws IOException {
 		if (dnBridge.isBlockTokenEnabled()) {
 			if (LOG.isDebugEnabled()) {
@@ -745,26 +746,23 @@ class DataXceiver extends Receiver {
 			try {
 				dnBridge.getBlockPoolTokenSecretManager().checkAccess(t, null, blk, mode);
 			} catch (InvalidToken e) {
-				try {
-					if (reply) {
-						BlockOpResponseProto.Builder resp = BlockOpResponseProto.newBuilder().setStatus(ERROR_ACCESS_TOKEN);
-						if (mode == BlockTokenSecretManager.AccessMode.WRITE) {
-							DatanodeRegistration dnR = dnBridge.getDNRegistrationForBP(blk.getBlockPoolId());
-							// NB: Unconditionally using the xfer addr w/o hostname
-							resp.setFirstBadLink(dnR.getXferAddr());
-						}
-						resp.build().writeDelimitedTo(out);
-						out.flush();
+				if (reply) {
+					final OutputStream replyOut = new ByteBufferOutputStream(currMsg.getOut());
+					BlockOpResponseProto.Builder resp = BlockOpResponseProto.newBuilder().setStatus(ERROR_ACCESS_TOKEN);
+					if (mode == BlockTokenSecretManager.AccessMode.WRITE) {
+						DatanodeRegistration dnR = dnBridge.getDNRegistrationForBP(blk.getBlockPoolId());
+						// NB: Unconditionally using the xfer addr w/o hostname
+						resp.setFirstBadLink(dnR.getXferAddr());
 					}
-					LOG.warn("Block token verification failed: op=" + op + ", serverSession=" + serverSession + ", message="
-					        + e.getLocalizedMessage());
-					throw e;
-
-				} finally {
-					IOUtils.closeStream(out);
+					resp.build().writeDelimitedTo(replyOut);
+					replyOut.flush();
+					serverSession.sendResponse(currMsg);
 				}
+				LOG.error("Block token verification failed: op=" + op + ", serverSession=" + serverSession + ", message=" + e.getLocalizedMessage());
+				return false;// FAILED
 			}
 		}
+		return true; // SUCCESS
 	}
 
 	@Override
