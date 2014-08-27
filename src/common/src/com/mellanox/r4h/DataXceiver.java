@@ -131,10 +131,14 @@ class DataXceiver extends Receiver {
 		@Override
 		public boolean onMsgError(Msg msg, EventReason reason) {
 			boolean releaseMsg = true; // Always return the message to server's bound pool
-			LOG.error(String.format("Server Msg error: MSG=%s reason=%s ss=%s ss.isClosing=%s cs=%s cs.isClosing=%s", msg, reason, serverSession,
-			        serverSession.getIsClosing(), clientSession, (clientSession != null) ? clientSession.getIsClosing() : null));
+			if (hasPipeline()) {
+				LOG.error(String.format("Server Msg error: MSG=%s reason=%s ss=%s ss.isClosing=%s cs=%s cs.isClosing=%s", msg, reason, serverSession,
+				        serverSession.getIsClosing(), clientSession, clientSession.getIsClosing()));
+			} else {
+				LOG.error(String.format("Server Msg error: MSG=%s reason=%s ss=%s ss.isClosing=%s", msg, reason, serverSession,
+				        serverSession.getIsClosing()));
+			}
 			onFlightMsgs.remove(msg);
-			// TODO: sendReply(NACK) ? or ss.close() ?
 			DataXceiver.this.close();
 			return releaseMsg;
 		}
@@ -229,7 +233,7 @@ class DataXceiver extends Receiver {
 		@Override
 		public void onMsgError(Msg msg, EventReason reason) {
 			LOG.error(String.format("Client Msg error: MSG=%s reason=%s ss=%s ss.isClosing=%s cs=%s cs.isClosing=%s", msg, reason, serverSession,
-			        serverSession.getIsClosing(), clientSession, (clientSession != null) ? clientSession.getIsClosing() : null));
+			        serverSession.getIsClosing(), clientSession, clientSession.getIsClosing()));
 			DataXceiver.this.close();
 		}
 
