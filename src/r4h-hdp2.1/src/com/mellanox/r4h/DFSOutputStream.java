@@ -166,6 +166,7 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 	private String name; // used as the toString value
 	// Is used to ensure we get session close event in the end of last block.
 	private boolean wasLastSessionClosed = false;
+	private boolean wasClientSessionCreated = false;
 	// R4H stuff ends here.
 
 	private final DFSClient dfsClient;
@@ -1045,7 +1046,9 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 		}
 
 		private void closeInternal() {
-			if (!wasLastSessionClosed) {
+			if (!wasClientSessionCreated) {
+				LOG.debug("ClientSession was never created. Not waiting for SESSION_CLOSED event.");
+			} else if (!wasLastSessionClosed) {
 				long start = System.nanoTime();
 				DFSOutputStream.this.eventQHandler.runEventLoop(1, CLOSE_WAIT_TIMEOUT_IN_USEC);
 				long durationUsec = (System.nanoTime() - start) / 1000;
@@ -1614,6 +1617,7 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 
 					wasLastSessionClosed = false;
 					DFSOutputStream.this.clientSession = new ClientSession(eventQHandler, uri, clientSessionCallbacks);
+					wasClientSessionCreated = true;
 					if (!clientSessionCallbacks.wasSessionEstablished) {
 						DFSOutputStream.this.eventQHandler.runEventLoop(1, 1000);
 					}
