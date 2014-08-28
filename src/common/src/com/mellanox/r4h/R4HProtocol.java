@@ -13,6 +13,7 @@ import java.util.Arrays;
 import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
 
 import com.mellanox.jxio.exceptions.JxioGeneralException;
+import com.mellanox.jxio.exceptions.JxioQueueOverflowException;
 import com.mellanox.jxio.exceptions.JxioSessionClosedException;
 import com.mellanox.jxio.ServerSession;
 import com.mellanox.jxio.ClientSession;
@@ -91,10 +92,8 @@ public class R4HProtocol {
 	public static void wrappedSendRequest(ClientSession session, Msg message, Log log) {
 		try {
 			session.sendRequest(message);
-		} catch (JxioSessionClosedException exc) {
-			log.error("Sending request message failed, session was closed in the middle: " + exc);
-		} catch (JxioGeneralException exc) {
-			log.error("Sending request message failed, (general error): " + exc);
+		} catch (JxioSessionClosedException | JxioQueueOverflowException | JxioGeneralException e) {
+			log.error("Sending request message failed: " + e);
 		}
 	}
 
