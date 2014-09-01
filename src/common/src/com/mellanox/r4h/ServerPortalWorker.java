@@ -50,7 +50,7 @@ public class ServerPortalWorker implements Worker {
 	private final int msgInSize;
 	private final int numOfMsgsToBind;
 	private volatile boolean isFree = false;
-	private ExecutorService packetAsyncIOExecutor = Executors.newSingleThreadExecutor();
+	private ExecutorService packetAsyncIOExecutor;
 
 
 	private final Callbacks onDynamicMsgPoolAllocation = new EventQueueHandler.Callbacks() {
@@ -96,10 +96,11 @@ public class ServerPortalWorker implements Worker {
 		this.msgInSize = msgInSize;
 		this.msgOutSize = msgOutSize;
 		this.numOfMsgsToBind = numOfMsgsToBind;
+		packetAsyncIOExecutor = Executors.newSingleThreadExecutor();
 		this.eqh = new R4HEventHandler(onDynamicMsgPoolAllocation, onEqhBreak);
-
 		this.sp = new ServerPortal(eqh, uri);
 		this.th = new Thread(eqh);
+		this.th.setName(String.format("ServerPortalWorker-%d-ExecutorHashCode=%d", this.th.getId(), packetAsyncIOExecutor.hashCode()));
 		MsgPool msgPool = allocateBuffers();
 		this.eqh.bindMsgPool(msgPool);
 	}

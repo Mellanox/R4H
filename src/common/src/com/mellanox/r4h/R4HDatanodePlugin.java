@@ -67,6 +67,7 @@ public class R4HDatanodePlugin implements ServicePlugin {
 			throw new IllegalArgumentException("Failed to create URI for DataXceriverServer", e);
 		}
 		daemon = new Daemon(dxs);
+		daemon.setName(String.format("DataXceiverServer-JXIO-Listener-%d", daemon.getId()));
 		daemon.start();
 		LOG.info("Started");
 		LOG.debug(this.toString());
