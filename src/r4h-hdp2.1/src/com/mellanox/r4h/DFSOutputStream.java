@@ -1545,7 +1545,6 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 					block = null;
 					DFSOutputStream.LOG.info(DFSOutputStream.this.toString() + "Excluding datanode " + nodes[errorIndex]);
 					excludedNodes.put(nodes[errorIndex], nodes[errorIndex]);
-					--count;
 				}
 			} while (!success && --count >= 0);
 
