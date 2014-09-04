@@ -140,26 +140,29 @@ while getopts "$optspec" optchar; do
                 no_restart)
                     export NO_RESTART=1
                     ;;
-        iter_vnl=*)
-            val=${OPTARG#*=}
-                    opt=${OPTARG%=$val}
-            export ITERATIONS_VNL="${val}"
-            ;;
-        iter_r4h=*)
-            val=${OPTARG#*=}
-                    opt=${OPTARG%=$val}
-            export ITERATIONS_R4H="${val}"
-            ;;
-        comment_subject=*)
-            val=${OPTARG#*=}
-                    opt=${OPTARG%=$val}
-            export COMMENT_SUBJECT="${val}"
-            ;;
-        comment_body=*)
-            val=${OPTARG#*=}
-                    opt=${OPTARG%=$val}
-            export COMMENT_BODY="${val}"
-            ;;
+                wordcount)
+                    export WORDCOUNT=1
+                    ;;
+                iter_vnl=*)
+                    val=${OPTARG#*=}
+                            opt=${OPTARG%=$val}
+                    export ITERATIONS_VNL="${val}"
+                    ;;
+                iter_r4h=*)
+                    val=${OPTARG#*=}
+                            opt=${OPTARG%=$val}
+                    export ITERATIONS_R4H="${val}"
+                    ;;
+                comment_subject=*)
+                    val=${OPTARG#*=}
+                            opt=${OPTARG%=$val}
+                    export COMMENT_SUBJECT="${val}"
+                    ;;
+                comment_body=*)
+                    val=${OPTARG#*=}
+                            opt=${OPTARG%=$val}
+                    export COMMENT_BODY="${val}"
+                    ;;
                 *)
                     if [ "$OPTERR" = 1 ] && [ "${optspec:0:1}" != ":" ]; then
                         echo "Unknown option --${OPTARG}" >&2
@@ -213,6 +216,15 @@ if [[ -n "$DFSIOE_FILES_NUM_SET" ]] && [[ -n "$DFSIOE_FILES_SIZE_SET" ]]; then
     fi
     export RAN_DFSIOE="1"
     bash -x runDFSIOE.sh "$DFSIOE_FILES_NUM_SET" "$DFSIOE_FILES_SIZE_SET"&
+    waitForPID $!
+fi
+
+if [[ -n "$WORDCOUNT" ]]; then
+    if [[ -z "$NO_RESTART" ]]; then
+        restartCluster
+    fi
+    export RAN_WORDCOUNT="1"
+    bash -x runWordCount.sh&
     waitForPID $!
 fi
 

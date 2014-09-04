@@ -42,6 +42,9 @@ message="<font size=6 color=blue><b>Daily R4H Regression Report</b></font><br><b
 if [[ -n "$CLUSTER" ]]; then
     message="$message <b>Cluster:</b> ${CLUSTER}<br>"
 fi
+
+message="$message <b>Master:</b> $(hostname)<br>"
+
 R4H_VERSION=`unzip -q -c "$R4H_JAR_PATH" META-INF/MANIFEST.MF | grep "Implementation-Version" | awk '{ print $2 }'`
 JXIO_VERSION=`unzip -q -c "$JXIO_JAR_PATH" META-INF/MANIFEST.MF | egrep "Implementation-Version|Specification-Version" | awk '{ print $2 }'`
 
@@ -73,6 +76,17 @@ fi
 if [[ -n "$RAN_DFSIOE" ]]; then
     message="$message <li>TestDFSIO-Enh [NumOfFiles: ${DFSIOE_FILES_NUM_SET}, FileSizes: ${DFSIOE_FILES_SIZE_SET}, Replication: ${DFS_REPLICATION}]</li>"
 fi
+
+if [[ -n "$RAN_WORDCOUNT" ]]; then
+    WC_FAILED=$(grep -c "FAILED" ${WORDCOUNT_REPORT_PATH})
+    if (($WC_FAILED != 0)); then
+        WC_RES="<font color=red>${FAILURE_CODE}</font>"
+    else
+        WC_RES="<font color=lime>${SUCCESS_CODE}</font>"
+    fi
+    message="$message <li>WordCount: ${WC_RES}</li>"
+fi
+
 message="$message </ul>"
 message="$message <br><br>Attaching reports.<br>"
 subject="${MAIL_SUBJECT}"
