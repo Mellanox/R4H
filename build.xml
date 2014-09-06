@@ -11,19 +11,25 @@
     <property name="target" value="1.7"/>
     <property name="source" value="1.7"/>
     <target name="cdh44">
-	<property name="hadoopdir" value="/.autodirect/acclgwork/ufa/HDFS/hadoop-2.0.0-cdh4.4.0-SNAPSHOT/share/hadoop" />
+	<property name="hadoopdir" value="/.autodirect/acclgwork/ufa/HDFS/r4h-dist-jars/cdh4.4" />
 	<property name="matching-src" value="r4h-cdh4.4" />
 	<property name="jar-title" value="R4H-CDH44" />
 	<antcall target="build" />
     </target>
     <target  name="cdh502">
-	    <property name="hadoopdir" value="/.autodirect/acclgwork/ufa/HDFS/hadoop-2.3.0-cdh5.0.2/share/hadoop" />
+	<property name="hadoopdir" value="/.autodirect/acclgwork/ufa/HDFS/r4h-dist-jars/cdh5.0.2" />
 	<property name="matching-src" value="r4h-cdh5.0.2" />
 	<property name="jar-title" value="R4H-CDH5.0.2" />
 	<antcall target="build" />
     </target>
+    <target  name="cdh512">
+	<property name="hadoopdir" value="/.autodirect/acclgwork/ufa/HDFS/r4h-dist-jars/cdh5.1.2" />
+	<property name="matching-src" value="r4h-cdh5.1.2" />
+	<property name="jar-title" value="R4H-CDH5.1.2" />
+	<antcall target="build" />
+    </target>
     <target  name="hdp212">
-	    <property name="hadoopdir" value="/.autodirect/acclgwork/ufa/HDFS/hadoop-2.4.0.HDP-2.1.2/share/hadoop" />
+	<property name="hadoopdir" value="/.autodirect/acclgwork/ufa/HDFS/r4h-dist-jars/hdp2.1.2" />
 	<property name="matching-src" value="r4h-hdp2.1.2" />
 	<property name="jar-title" value="R4H-HDP2.1.2" />
 	<antcall target="build" />
@@ -52,19 +58,10 @@
 
 	<path id="R4H.classpath">
 		<pathelement location="build"/>
-		<fileset dir="${hadoopdir}/hdfs/">
-			<include name="*.jar" />
-		</fileset>
-		<fileset dir="${hadoopdir}/common/">
-			<include name="*.jar" />
-		</fileset>
-		<fileset dir="${hadoopdir}/hdfs/lib">
+		<fileset dir="${hadoopdir}/">
 			<include name="*.jar" />
 		</fileset>
 		<pathelement location="jxio/bin/jxio.jar"/>
-		<fileset dir="${hadoopdir}/common/lib">
-			<include name="*.jar" />
-		</fileset>
 	</path>
     </target>
 
