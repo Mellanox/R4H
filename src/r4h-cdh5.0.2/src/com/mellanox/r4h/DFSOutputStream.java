@@ -165,7 +165,7 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 	private ConcurrentLinkedQueue<Packet> ackQueue = new ConcurrentLinkedQueue<Packet>();
 	private String name; // used as the toString value
 	// Is used to ensure we get session close event in the end of last block.
-	private boolean wasLastSessionClosed = false;
+	private boolean wasLastSessionClosed = true;
 	// Indicates whether encountered an error in the middle of operation. In such case we strive to EXIT as soon as possible.
 	private boolean errorFlowInTheMiddle = false;
 	// R4H stuff ends here.

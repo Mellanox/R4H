@@ -165,8 +165,7 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 	private ConcurrentLinkedQueue<Packet> ackQueue = new ConcurrentLinkedQueue<Packet>();
 	private String name; // used as the toString value
 	// Is used to ensure we get session close event in the end of last block.
-	private boolean wasLastSessionClosed = false;
-	private boolean wasClientSessionCreated = false;
+	private boolean wasLastSessionClosed = true;
 	// Indicates whether encountered an error in the middle of operation. In such case we strive to EXIT as soon as possible.
 	private boolean errorFlowInTheMiddle = false;
 	// R4H stuff ends here.
@@ -1052,9 +1051,7 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 		}
 
 		private void closeInternal() {
-			if (!wasClientSessionCreated) {
-				LOG.debug("ClientSession was never created. Not waiting for SESSION_CLOSED event.");
-			} else if (!wasLastSessionClosed) {
+			if (!wasLastSessionClosed) {
 				long start = System.nanoTime();
 				DFSOutputStream.this.eventQHandler.runEventLoop(1, CLOSE_WAIT_TIMEOUT_IN_USEC);
 				long durationUsec = (System.nanoTime() - start) / 1000;
@@ -1646,7 +1643,6 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 
 					wasLastSessionClosed = false;
 					DFSOutputStream.this.clientSession = new ClientSession(eventQHandler, uri, clientSessionCallbacks);
-					wasClientSessionCreated = true;
 					final int eventLoopRunDurationUsec = 1000;
 
 					if (!checkWasClientSessionEstablished(clientSessionCallbacks, eventLoopRunDurationUsec)) {
