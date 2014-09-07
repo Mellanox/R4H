@@ -2,7 +2,7 @@
 
 jobSizeSet=$1
 reduceTasksSet=$2
-MAPS=$(echo $SLAVES | awk '{ print split($0,a,",")*4; }')
+MAPS=$(echo $SLAVES | awk -v cont=${CONTAINERS_PER_NODE} '{ print split($0,a,",")*cont-1; }')
 
 exportResultsToReport()
 {
