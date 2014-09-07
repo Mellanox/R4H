@@ -2085,7 +2085,6 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 					// Rather than wait around for space in the queue, we should instead try to
 					// return to the caller as soon as possible, even though we slightly overrun
 					// the MAX_PACKETS length.
-					LOG.info("DEBUG waitAndQueueCurrentPacket interuppted");
 					Thread.currentThread().interrupt();
 					break;
 				}
