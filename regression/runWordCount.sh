@@ -8,6 +8,8 @@ compareOutputs()
     if [[ "$result" != "" ]]; then
         echo "FAILED: Output files differ between R4H and Vanilla." | tee -a ${LONG_LOG} ${WORDCOUNT_REPORT_PATH}
         JOB_FAILED=1
+    else
+        echo "SUCCESS" | tee -a ${LONG_LOG} ${WORDCOUNT_REPORT_PATH}
     fi
 }
 

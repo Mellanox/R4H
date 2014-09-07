@@ -78,8 +78,8 @@ if [[ -n "$RAN_DFSIOE" ]]; then
 fi
 
 if [[ -n "$RAN_WORDCOUNT" ]]; then
-    WC_FAILED=$(grep -c "FAILED" ${WORDCOUNT_REPORT_PATH})
-    if (($WC_FAILED != 0)); then
+    WC_SUCC=$(grep -c "SUCCESS" ${WORDCOUNT_REPORT_PATH})
+    if (($WC_SUCC == 0)); then
         WC_RES="<font color=red>${FAILURE_CODE}</font>"
     else
         WC_RES="<font color=lime>${SUCCESS_CODE}</font>"
