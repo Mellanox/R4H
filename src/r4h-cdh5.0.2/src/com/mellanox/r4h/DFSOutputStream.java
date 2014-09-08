@@ -907,7 +907,7 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 								LOG.trace("Going to run event loop with " + eventsToProcess + " events to process.");
 							}
 
-							DFSOutputStream.this.eventQHandler.runEventLoop(eventsToProcess, 10 * 1000);
+							DFSOutputStream.this.eventQHandler.runEventLoop(eventsToProcess, 1000 * 1000);
 							if (errorFlowInTheMiddle) {
 								DFSOutputStream.this.eventQHandler.setIgnoreBreak(true);
 								throw new IOException("Error in message/session while running streamer, client cannot continue.");
@@ -1016,7 +1016,7 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 						// wait for the close packet has been acked
 
 						while (!hasError && !wasLastPacketAcked && dfsClient.clientRunning) {
-							DFSOutputStream.this.eventQHandler.runEventLoop(1, 1);
+							DFSOutputStream.this.eventQHandler.runEventLoop(1, 1000 * 1000);
 							if (errorFlowInTheMiddle) {
 								throw new IOException(
 								        "Error in message/session while waiting for last packet ack in streamer, client cannot continue.");
