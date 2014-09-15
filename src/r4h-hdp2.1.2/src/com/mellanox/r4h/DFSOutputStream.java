@@ -668,9 +668,6 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 						        + String.format("Session error occurred in the middle of the block: session=%s, event=%s, reason=%s",
 						                DFSOutputStream.this.clientSession, session_event, reason));
 					}
-					// Break the event loop, returning the context to where the event loop was run originally
-					DFSOutputStream.this.eventQHandler.breakEventLoop();
-					// TODO: handle error!
 					break;
 				default:
 					break;
@@ -678,6 +675,7 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 
 			if (errorFlow) {
 				errorFlowInTheMiddle = true;
+				// Break the event loop, returning the context to where the event loop was run originally
 				DFSOutputStream.this.eventQHandler.breakEventLoop();
 			}
 		}
