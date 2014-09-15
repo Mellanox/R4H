@@ -46,7 +46,15 @@ public class R4HEventHandler extends EventQueueHandler {
 	public void run() {
 		try {
 			while (true) { //TODO: while !this.stopLoop?
-				runEventLoop(-1 /* Infinite events */, -1 /* Infinite duration */);
+				int ne = runEventLoop(-1 /* Infinite events */, -1 /* Infinite duration */);
+				if (ne == -1) {
+					LOG.error("JXIO catched exception during event processing");
+					if (this.didExceptionOccur()) {
+						LOG.error(StringUtils.stringifyException(this.getCaughtException()));
+					} else {
+						LOG.warn("No exception to retrieve after JXIO indication for exception during event processing");
+					}
+				}
 				onBreakEqh();
 			}
 		} catch (Throwable t) {
