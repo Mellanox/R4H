@@ -568,8 +568,10 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 								}
 							}
 							closeEventExpected = true;
-							clientSession.close();
-							clientSession = null;
+							if ((clientSession != null) && !clientSession.getIsClosing()){
+								clientSession.close();
+								clientSession = null;
+							}
 						}
 
 						if (LOG.isDebugEnabled()) {
@@ -687,7 +689,7 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 			msg.returnToParentPool();
 			DFSOutputStream.LOG.error(DFSOutputStream.this.toString()
 			        + String.format("Msg error occurred: reason=%s, countPacketArrived=%d", reason, countPacketArrived));
-			if (clientSession != null) {
+			if ((clientSession != null) && !clientSession.getIsClosing()) {
 				clientSession.close();
 				clientSession = null;
 				closeEventExpected = true;
@@ -1632,7 +1634,7 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 					// Close/Clean old session
 					clientSessionCallbacks.wasSessionEstablished = false;
 					clientSessionCallbacks.countPacketArrived = 0;
-					if (DFSOutputStream.this.clientSession != null) {
+					if ((DFSOutputStream.this.clientSession != null) && !clientSession.getIsClosing()) {
 						clientSession.close();
 						clientSession = null;
 					}
