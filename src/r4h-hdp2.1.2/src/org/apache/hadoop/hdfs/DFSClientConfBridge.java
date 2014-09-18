@@ -12,9 +12,24 @@ import org.apache.hadoop.util.DataChecksum;
  * DFSClient configuration
  */
 public class DFSClientConfBridge extends Conf {
-
+	// Default value for time to wait for header ack before pronouncing failure:
+	private static final int HEADER_ACK_CLIENT_TIMEOUT_USEC_DEFAULT = 3000000;
+	// The parameter name of time to wait for header ack before pronouncing failure:
+	private static final String HEADER_ACK_CLIENT_TIMEOUT_PARAM_NAME = "r4h.client.header.ack.timeout";
+	// The time to wait for header ack before pronouncing failure:
+	private int headerAckTimeoutUsec;
+	
 	public DFSClientConfBridge(Configuration conf) {
 		super(conf);
+		this.headerAckTimeoutUsec = conf.getInt(HEADER_ACK_CLIENT_TIMEOUT_PARAM_NAME, HEADER_ACK_CLIENT_TIMEOUT_USEC_DEFAULT);
+	}
+	
+	/**
+	 * 
+	 * @return headerAckTimeoutUsec
+	 */
+	public int getHeaderAckTimeoutUsec() {
+		return headerAckTimeoutUsec;
 	}
 
 	/**

@@ -98,8 +98,6 @@ import org.apache.hadoop.util.Progressable;
 import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.util.Time;
 
-import com.mellanox.r4h.DFSOutputStream.CSCallbacks;
-
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheLoader;
@@ -170,6 +168,8 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 	private boolean wasLastSessionClosed = true;
 	// Indicates whether encountered an error in the middle of operation. In such case we strive to EXIT as soon as possible.
 	private boolean errorFlowInTheMiddle = false;
+	// The time to wait for header ack before pronouncing failure:
+	private int headerAckTimeoutUsec;
 	// R4H stuff ends here.
 
 	private final DFSClient dfsClient;
@@ -572,8 +572,8 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 							}
 							closeEventExpected = true;
 							if ((clientSession != null) && !clientSession.getIsClosing()) {
-    							clientSession.close();
-    							clientSession = null;
+								clientSession.close();
+								clientSession = null;
 							}
 						}
 
@@ -690,7 +690,7 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 			msg.returnToParentPool();
 			DFSOutputStream.LOG.error(DFSOutputStream.this.toString()
 			        + String.format("Msg error occurred: reason=%s, countPacketArrived=%d", reason, countPacketArrived));
-			if (clientSession != null && !clientSession.getIsClosing()) {
+			if ((clientSession != null) && !clientSession.getIsClosing()) {
 				clientSession.close();
 				clientSession = null;
 				closeEventExpected = true;
@@ -913,9 +913,8 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 								LOG.trace("Going to run event loop with " + eventsToProcess + " events to process.");
 							}
 
-							DFSOutputStream.this.eventQHandler.runEventLoop(eventsToProcess, 10 * 1000);
+							DFSOutputStream.this.eventQHandler.runEventLoop(eventsToProcess, 1000 * 1000);
 							if (errorFlowInTheMiddle) {
-								DFSOutputStream.this.eventQHandler.setIgnoreBreak(true);
 								throw new IOException("Error in message/session while running streamer, client cannot continue.");
 							}
 							doSleep = false;
@@ -1022,7 +1021,7 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 						// wait for the close packet has been acked
 
 						while (!hasError && !wasLastPacketAcked && dfsClient.clientRunning) {
-							DFSOutputStream.this.eventQHandler.runEventLoop(1, 1);
+							DFSOutputStream.this.eventQHandler.runEventLoop(1, 1000 * 1000);
 							if (errorFlowInTheMiddle) {
 								throw new IOException(
 								        "Error in message/session while waiting for last packet ack in streamer, client cannot continue.");
@@ -1576,7 +1575,7 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 			if (!clientSessionCallbacks.wasSessionEstablished) {
 				DFSOutputStream.this.eventQHandler.runEventLoop(1, eventLoopRunDurationUsec);
 				if (errorFlowInTheMiddle) {
-					LOG.fatal("Error in message/session while waiting for session establishment, client cannot continue.");
+					LOG.error("Error in message/session while waiting for session establishment, client cannot continue.");
 					return false;
 				}
 			}
@@ -1641,7 +1640,7 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 					// Close/Clean old session
 					clientSessionCallbacks.wasSessionEstablished = false;
 					clientSessionCallbacks.countPacketArrived = 0;
-					if (DFSOutputStream.this.clientSession != null && !DFSOutputStream.this.clientSession.getIsClosing()) {
+					if ((DFSOutputStream.this.clientSession != null) && !DFSOutputStream.this.clientSession.getIsClosing()) {
 						clientSession.close();
 						clientSession = null;
 					}
@@ -1734,30 +1733,27 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 					}
 
 					// Now we run the event queue handler. Ack/nack will be handled in the respective callbacks of the client
-					// session. There we also will break the eqh, and then this function will return.
-					// Do this in the end of this function, after sending out the header.
-					// TODO To think whether use timeouts for error handling.
-					final long startWaitingForAckTSMicro = System.nanoTime() / 1000;
+					// session.
+					long startWaitingForAckTSMicro;
+					long endWaitingForAckTSMicro;
+					int timeToWaitForHeaderAckUsec = headerAckTimeoutUsec;
 
-					long loops = 0;
-					long events = 0;
-					while (!wasHeaderAckReceived && !didHeaderFail) {
-						loops++;
-						if (DFSOutputStream.LOG.isTraceEnabled()) {
-							LOG.trace("Going to wait for header ack: 1 event, infinite duration.");
-						}
-						events += DFSOutputStream.this.eventQHandler.runEventLoop(1, -1);
+					while (!wasHeaderAckReceived && !didHeaderFail && (timeToWaitForHeaderAckUsec > 0)) {
+						startWaitingForAckTSMicro = System.nanoTime() / 1000;
+						DFSOutputStream.this.eventQHandler.runEventLoop(1, timeToWaitForHeaderAckUsec);
+						endWaitingForAckTSMicro = System.nanoTime() / 1000;
+						timeToWaitForHeaderAckUsec -= (endWaitingForAckTSMicro - startWaitingForAckTSMicro);
+
 						if (errorFlowInTheMiddle) {
-							LOG.fatal("Error in message/session while waiting for header ack, client cannot continue.");
+							LOG.error("Error in message/session while waiting for header ack, client cannot continue.");
 							return false;
 						}
 					}
 
-					if (DFSOutputStream.LOG.isDebugEnabled()) {
-						final long headerAckTimeMicro = System.nanoTime() / 1000 - startWaitingForAckTSMicro;
-						DFSOutputStream.LOG.debug(DFSOutputStream.this.toString()
-						        + String.format("Header ACK duration=%d  (packets arrived=%d, nodes.len=%d, errorIndex=%d, events=%d, loops=%d)",
-						                headerAckTimeMicro, clientSessionCallbacks.countPacketArrived, nodes.length, errorIndex, events, loops));
+					if (!wasHeaderAckReceived) {
+						errorFlowInTheMiddle = true;
+						LOG.error(String.format("Waited for header ack longer than %d ms, client cannot continue.", headerAckTimeoutUsec / 1000));
+						return false;
 					}
 
 					if (didHeaderFail) {
@@ -1963,6 +1959,7 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 		this.usingJxioClientResource = true;
 		this.eventQHandler = jxioResource.getEqh();
 		this.msgPool = jxioResource.getMsgPool();
+		this.headerAckTimeoutUsec = dfsClient.getConf().getHeaderAckTimeoutUsec();
 
 		if ((progress != null) && DFSOutputStream.LOG.isDebugEnabled()) {
 			DFSOutputStream.LOG.debug("Set non-null progress callback on DFSOutputStream " + src);
