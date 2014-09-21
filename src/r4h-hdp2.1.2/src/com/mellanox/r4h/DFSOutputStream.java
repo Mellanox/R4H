@@ -169,7 +169,7 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 	// Indicates whether encountered an error in the middle of operation. In such case we strive to EXIT as soon as possible.
 	private boolean errorFlowInTheMiddle = false;
 	// The time to wait for header ack before pronouncing failure:
-	private int headerAckTimeoutUsec;
+	private long headerAckTimeoutUsec;
 	// R4H stuff ends here.
 
 	private final DFSClient dfsClient;
@@ -1737,7 +1737,7 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 					// session.
 					long startWaitingForAckTSMicro;
 					long endWaitingForAckTSMicro;
-					int timeToWaitForHeaderAckUsec = headerAckTimeoutUsec;
+					long timeToWaitForHeaderAckUsec = headerAckTimeoutUsec;
 
 					while (!wasHeaderAckReceived && !didHeaderFail && (timeToWaitForHeaderAckUsec > 0)) {
 						startWaitingForAckTSMicro = System.nanoTime() / 1000;
@@ -1753,7 +1753,7 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 
 					if (!wasHeaderAckReceived) {
 						errorFlowInTheMiddle = true;
-						LOG.error(String.format("Waited for header ack longer than %d ms, client cannot continue.", headerAckTimeoutUsec / 1000));
+						LOG.error(String.format("Waited for header ack longer than %d seconds, client cannot continue.", headerAckTimeoutUsec/1000000));
 						return false;
 					}
 
