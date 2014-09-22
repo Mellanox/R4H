@@ -214,6 +214,9 @@ class DataXceiverServer implements Runnable {
 			sessionToWorkerHashtable.remove(ss);
 			spPool.add(spw);
 			spw.setFree(true);
+			if (LOG.isDebugEnabled()) {
+				LOG.debug("returned SPW to pool. poolSize=" + spPool.size());
+			}
 		} else {
 			LOG.error(String.format("Failed to retrieve worker from session-->worker hashtable. missing session=%s", ss));
 			LOG.warn("Potential resource leak - Failed to return server portal worker to pool");
