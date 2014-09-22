@@ -1596,6 +1596,7 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 			}
 			Status pipelineStatus = SUCCESS;
 			didHeaderFail = false;
+			errorFlowInTheMiddle = false;
 			boolean checkRestart = false;
 			if (LOG.isDebugEnabled()) {
 				for (int i = 0; i < nodes.length; i++) {
