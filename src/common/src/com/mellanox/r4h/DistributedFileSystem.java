@@ -150,6 +150,7 @@ public class DistributedFileSystem extends FileSystem {
 		this.dfs = new DFSClient(uri, conf, statistics);
 		this.uri = URI.create(uri.getScheme() + "://" + uri.getAuthority());
 		this.workingDir = getHomeDirectory();
+		LOG.info("Using Mellanox RDMA acceleration");
 	}
 
 	@Override
