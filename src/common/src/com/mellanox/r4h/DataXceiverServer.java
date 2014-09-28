@@ -20,7 +20,9 @@ package com.mellanox.r4h;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.Hashtable;
+import java.util.List;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.Executors;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -185,7 +187,7 @@ class DataXceiverServer implements Runnable {
 
 	public void stop() {
 		// TODO: PROPER CLOSE OF ALL WORKERS!
-		
+
 		LOG.debug("Closing main listener event queue handler");
 		eqh.close();
 		LOG.debug("After main listener event queue handler close");
@@ -212,6 +214,11 @@ class DataXceiverServer implements Runnable {
 			DataXceiver dxc = sessionToWorkerHashtable.get(ss);
 			ServerPortalWorker spw = dxc.getServerPortalWorker();
 			sessionToWorkerHashtable.remove(ss);
+			List<Runnable> remainingTasks = spw.getPacketAsyncIOExecutor().shutdownNow();
+			if (!remainingTasks.isEmpty()) {
+				LOG.warn(String.format("Shutting down IO thread with %d remaining unexecuted tasks", remainingTasks.size()));
+			}
+			spw.setPacketAsyncIOExecutor(Executors.newSingleThreadExecutor());
 			spPool.add(spw);
 			spw.setFree(true);
 			if (LOG.isDebugEnabled()) {

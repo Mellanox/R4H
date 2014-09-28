@@ -52,7 +52,6 @@ public class ServerPortalWorker implements Worker {
 	private volatile boolean isFree = false;
 	private ExecutorService packetAsyncIOExecutor;
 
-
 	private final Callbacks onDynamicMsgPoolAllocation = new EventQueueHandler.Callbacks() {
 
 		@Override
@@ -175,10 +174,14 @@ public class ServerPortalWorker implements Worker {
 	}
 
 	ExecutorService getPacketAsyncIOExecutor() {
-	    return packetAsyncIOExecutor;
-    }
+		return packetAsyncIOExecutor;
+	}
 
 	protected void clearAsyncOprQueue() {
 		this.asyncOprQueue.clear();
-    }
+	}
+
+	public void setPacketAsyncIOExecutor(ExecutorService newExecutor) {
+		this.packetAsyncIOExecutor = newExecutor;
+	}
 }
