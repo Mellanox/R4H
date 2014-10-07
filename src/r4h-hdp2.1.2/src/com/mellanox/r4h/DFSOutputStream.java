@@ -142,7 +142,7 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 	private static long lastOperationTS = 0;
 	private Object lastOperationTSLock = new Object();
 	// The client session. A new client session is created per block.
-	private ClientSession clientSession;
+	private ClientSession currentClientSession;
 	// The event queue handler. We have only one such, and reuse it for all blocks.
 	private R4HEventHandler eventQHandler;
 	// The name of next DN node we're talking to (we hold it here for logging purposes only).
@@ -386,6 +386,7 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 		private boolean closeEventExpected;
 		private boolean errorFlowInTheMiddle;
 		private String firstBadLink;
+		private ClientSession clientSession;
 
 		public CSCallbacks() {
 			this.countPacketArrived = 0;
@@ -393,6 +394,7 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 			this.closeEventExpected = false;
 			this.errorFlowInTheMiddle = false;
 			this.firstBadLink = "";
+			this.clientSession = null;
 		}
 
 		@Override
@@ -574,9 +576,11 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 								}
 							}
 							closeEventExpected = true;
-							if ((clientSession != null) && !clientSession.getIsClosing()) {
-								clientSession.close();
-								clientSession = null;
+							if ((this.clientSession != null) && !this.clientSession.getIsClosing()) {
+								this.clientSession.close();
+								if (this.clientSession == DFSOutputStream.this.currentClientSession) {
+									DFSOutputStream.this.currentClientSession = null;
+								}
 							}
 						}
 
@@ -667,11 +671,11 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 						didHeaderFail = true;
 						DFSOutputStream.LOG.error(DFSOutputStream.this.toString()
 						        + String.format("Session error occurred before header ack was received: session=%s, event=%s, reason=%s",
-						                DFSOutputStream.this.clientSession, session_event, reason));
+						                this.clientSession, session_event, reason));
 					} else {
 						DFSOutputStream.LOG.error(DFSOutputStream.this.toString()
 						        + String.format("Session error occurred in the middle of the block: session=%s, event=%s, reason=%s",
-						                DFSOutputStream.this.clientSession, session_event, reason));
+						                this.clientSession, session_event, reason));
 					}
 					break;
 				default:
@@ -694,16 +698,22 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 			msg.returnToParentPool();
 			DFSOutputStream.LOG.error(DFSOutputStream.this.toString()
 			        + String.format("Msg error occurred: reason=%s, countPacketArrived=%d", reason, countPacketArrived));
-			if ((clientSession != null) && !clientSession.getIsClosing()) {
-				clientSession.close();
-				clientSession = null;
+			if ((this.clientSession != null) && !this.clientSession.getIsClosing()) {
+				this.clientSession.close();
 				closeEventExpected = true;
+				if (this.clientSession == DFSOutputStream.this.currentClientSession) {
+					DFSOutputStream.this.currentClientSession = null;
+				}
 			}
 			if (!wasHeaderAckReceived) {
 				didHeaderFail = true;
 			}
 			errorFlowInTheMiddle = true;
 			DFSOutputStream.this.eventQHandler.breakEventLoop();
+		}
+
+		public void setClientSession(ClientSession clientSession) {
+			this.clientSession = clientSession;
 		}
 	}
 
@@ -988,7 +998,7 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 					long now0 = System.nanoTime();
 					long now1 = System.nanoTime();
 					one.prepareBeforeSend();
-					R4HProtocol.wrappedSendRequest(DFSOutputStream.this.clientSession, one.msg, LOG);
+					R4HProtocol.wrappedSendRequest(DFSOutputStream.this.currentClientSession, one.msg, LOG);
 					long now2 = System.nanoTime();
 					sentSeqenceNum++;
 
@@ -1640,10 +1650,10 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 					}
 
 					// Close/Clean old session
-					if ((DFSOutputStream.this.clientSession != null) && !DFSOutputStream.this.clientSession.getIsClosing()) {
+					if ((DFSOutputStream.this.currentClientSession != null) && !DFSOutputStream.this.currentClientSession.getIsClosing()) {
 						this.currentCSCallbacks.closeEventExpected = true;
-						clientSession.close();
-						clientSession = null;
+						currentClientSession.close();
+						currentClientSession = null;
 					}
 
 					this.currentCSCallbacks = new CSCallbacks();
@@ -1653,9 +1663,10 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 					}
 
 					wasLastSessionClosed = false;
-					DFSOutputStream.this.clientSession = new ClientSession(eventQHandler, uri, this.currentCSCallbacks);
-					final int eventLoopRunDurationUsec = 1000;
+					DFSOutputStream.this.currentClientSession = new ClientSession(eventQHandler, uri, this.currentCSCallbacks);
+					this.currentCSCallbacks.setClientSession(DFSOutputStream.this.currentClientSession);
 
+					final int eventLoopRunDurationUsec = 1000;
 					if (!runEventLoopAndCheckErrorFlow(eventLoopRunDurationUsec)) {
 						return false;
 					}
@@ -1719,7 +1730,7 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 					}
 
 					long now1 = System.nanoTime();
-					R4HProtocol.wrappedSendRequest(DFSOutputStream.this.clientSession, message, LOG);
+					R4HProtocol.wrappedSendRequest(DFSOutputStream.this.currentClientSession, message, LOG);
 					long now2 = System.nanoTime();
 
 					if (!runEventLoopAndCheckErrorFlow(eventLoopRunDurationUsec)) {
