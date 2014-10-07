@@ -994,7 +994,8 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 
 					long now0 = System.nanoTime();
 					long now1 = System.nanoTime();
-					one.prepareBeforeSend();
+					PacketHeader header = one.prepareBeforeSend();
+					one.msg.setUserContext(header);
 					R4HProtocol.wrappedSendRequest(DFSOutputStream.this.currentClientSession, one.msg, LOG);
 					long now2 = System.nanoTime();
 					sentSeqenceNum++;
