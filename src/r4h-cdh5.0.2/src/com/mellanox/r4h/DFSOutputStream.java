@@ -304,7 +304,7 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 		}
 
 		// R4H made here few changes, including renaming the function.
-		void prepareBeforeSend() throws IOException {
+		PacketHeader prepareBeforeSend() throws IOException {
 			final int dataLen = dataPos - dataStart;
 			final int checksumLen = checksumPos - checksumStart;
 			final int pktLen = HdfsConstants.BYTES_IN_INTEGER + dataLen + checksumLen;
@@ -356,6 +356,8 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 				byteBuff.put(currContents);
 				byteBuff.position(sendLen);
 			}
+
+			return header;
 		}
 
 		// get the packet's last byte's offset in the block
@@ -529,11 +531,7 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 							break;
 						}
 
-						PacketHeader sentPcktHeader = new PacketHeader();
-						DataInput in = new DataInputStream(new ByteBufferInputStream(message.getOut()));
-						int headerStart = Utils.readVInt(in);
-						message.getOut().position(headerStart);
-						sentPcktHeader.readFields(message.getOut());
+						PacketHeader sentPcktHeader = (PacketHeader) message.getUserContext();
 
 						if (DFSOutputStream.LOG.isTraceEnabled()) {
 							DFSOutputStream.LOG.trace(String.format("Received ack with seq #%d, last pckt in block:%b. Sent seq #%d", seqno,
@@ -764,6 +762,9 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 		/** Append on an existing block? */
 		private final boolean isAppend;
 
+		final int ACK_Q_THRESHOLD_HIGH = R4HProtocol.MAX_SEND_PACKETS / 2;
+		final int ACK_Q_THRESHOLD_LOW = ACK_Q_THRESHOLD_HIGH / 2;
+
 		/**
 		 * Default construction for file create
 		 */
@@ -860,6 +861,17 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 			stage = BlockConstructionStage.PIPELINE_SETUP_CREATE;
 		}
 
+		int getNumOfAcksToProcess() {
+			int onFlight = ackQueue.size();
+			if (dataQueue.isEmpty()) {
+				return onFlight;
+			} else if (onFlight >= ACK_Q_THRESHOLD_HIGH) {
+				return onFlight - ACK_Q_THRESHOLD_LOW;
+			} else {
+				return 0;
+			}
+		}
+
 		/*
 		 * streamer thread is the only thread that opens streams to datanode,
 		 * and closes them. Any error recovery is also done by this thread.
@@ -881,8 +893,6 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 
 			long lastPacket = Time.now();
 
-			final int ACK_Q_THRESHOLD_HIGH = R4HProtocol.MAX_SEND_PACKETS / 2;
-			final int ACK_Q_THRESHOLD_LOW = ACK_Q_THRESHOLD_HIGH / 2;
 			while (!streamerClosed && dfsClient.clientRunning) {
 
 				Packet one = null;
@@ -896,8 +906,6 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 					if (hasError && errorIndex >= 0) {
 						doSleep = processDatanodeError();
 					}
-					// wait for a packet to be sent.
-					long now = System.nanoTime();
 
 					if (LOG.isTraceEnabled()) {
 						LOG.trace("Before streamer's inner while loop: |dataQ|=" + dataQueue.size() + ", |ackQ|=" + ackQueue.size());
@@ -908,30 +916,20 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 					while ((!streamerClosed && !hasError && dfsClient.clientRunning && ((dataQueue.isEmpty()) || (ackQueue.size() >= ACK_Q_THRESHOLD_HIGH)))
 					        || doSleep) {
 
-						now = System.nanoTime();
-						int ackQSize = ackQueue.size();
-						int eventsToProcess = ackQSize - ACK_Q_THRESHOLD_LOW;
-						if ((eventsToProcess <= 0) && dataQueue.isEmpty()) {
-							eventsToProcess = ackQSize;
-						}
+						int events = getNumOfAcksToProcess();
 
-						if (eventsToProcess <= 0) {
-							// dataQ&ackQ are empty - going to wait on dataQ for user to insert new packet
-							synchronized (dataQueue) {
-								if (dataQueue.isEmpty() && !streamerClosed && !hasError && dfsClient.clientRunning) {
-									dataQueue.wait();
-								}
-							}
-						} else {
-							if (LOG.isTraceEnabled()) {
-								LOG.trace("Going to run event loop with " + eventsToProcess + " events to process.");
-							}
-
-							DFSOutputStream.this.eventQHandler.runEventLoop(eventsToProcess, 1000 * 1000);
+						if (events > 0) {
+							DFSOutputStream.this.eventQHandler.runEventLoop(events, 10 * 1000 * 1000);
 							if (this.currentCSCallbacks.errorFlowInTheMiddle) {
 								throw new IOException("Error in message/session while running streamer, client cannot continue.");
 							}
-							doSleep = false;
+						} else {
+							synchronized (dataQueue) {
+								if (dataQueue.isEmpty() && !streamerClosed && !hasError && dfsClient.clientRunning) {
+									// dataQ&ackQ are empty - going to wait on dataQ for user to insert new packet
+									dataQueue.wait();
+								}
+							}
 						}
 					}
 
@@ -1774,8 +1772,8 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 					if (didHeaderFail) {
 						DFSOutputStream.LOG.warn(DFSOutputStream.this.toString()
 						        + String.format("Header failed (packets arrived=%d, nodes.len=%d, errorIndex=%d, firstBadLink.length=%d)",
-						        		this.currentCSCallbacks.countPacketArrived, nodes.length, errorIndex,
-						        		this.currentCSCallbacks.firstBadLink.length()));
+						                this.currentCSCallbacks.countPacketArrived, nodes.length, errorIndex,
+						                this.currentCSCallbacks.firstBadLink.length()));
 						currResult = false;
 					}
 					if (LOG.isDebugEnabled()) {
