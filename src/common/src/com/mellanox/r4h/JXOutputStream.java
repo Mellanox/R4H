@@ -22,9 +22,9 @@ import java.io.OutputStream;
 
 import org.apache.commons.logging.LogFactory;
 
-import com.mellanox.jxio.ClientSession;
-import com.mellanox.jxio.Msg;
-import com.mellanox.jxio.MsgPool;
+import org.accelio.jxio.ClientSession;
+import org.accelio.jxio.Msg;
+import org.accelio.jxio.MsgPool;
 
 /**
  * @todo

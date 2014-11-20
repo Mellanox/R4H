@@ -205,7 +205,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.net.InetAddresses;
-import com.mellanox.jxio.MsgPool;
+import org.accelio.jxio.MsgPool;
 import com.mellanox.r4h.client.HdfsDataInputStream;
 import com.mellanox.r4h.client.HdfsDataOutputStream;
 

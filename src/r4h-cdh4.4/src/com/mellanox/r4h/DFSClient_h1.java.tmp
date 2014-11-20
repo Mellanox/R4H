@@ -126,11 +126,11 @@ import org.apache.hadoop.util.StringUtils;
 
 import sun.net.util.IPAddressUtil;
 
-import com.mellanox.jxio.ClientSession;
-import com.mellanox.jxio.EventName;
-import com.mellanox.jxio.EventReason;
-import com.mellanox.jxio.Msg;
-import com.mellanox.jxio.MsgPool;
+import org.accelio.jxio.ClientSession;
+import org.accelio.jxio.EventName;
+import org.accelio.jxio.EventReason;
+import org.accelio.jxio.Msg;
+import org.accelio.jxio.MsgPool;
 import com.mellanox.ufa.DistributedFileSystem.DiskStatus;
 
 /********************************************************
@@ -2822,7 +2822,7 @@ public class DFSClient implements FSConstants, java.io.Closeable {
 		/**
 		 * The client session callbacks DFSClient uses.
 		 */
-		class CSCallbacks implements com.mellanox.jxio.ClientSession.Callbacks {
+		class CSCallbacks implements org.accelio.jxio.ClientSession.Callbacks {
 
 			@Override
 			/**

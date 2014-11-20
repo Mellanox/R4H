@@ -19,7 +19,7 @@ package com.mellanox.r4h;
 
 import org.apache.hadoop.hdfs.protocol.datatransfer.PipelineAck;
 
-import com.mellanox.jxio.Msg;
+import org.accelio.jxio.Msg;
 
 class PipelinePacketContext {
 	final private Msg msg;

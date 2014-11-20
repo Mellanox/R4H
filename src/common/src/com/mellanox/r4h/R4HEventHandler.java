@@ -21,7 +21,7 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.util.StringUtils;
 
-import com.mellanox.jxio.EventQueueHandler;
+import org.accelio.jxio.EventQueueHandler;
 
 public class R4HEventHandler extends EventQueueHandler {
 	Runnable onBreakEqh;

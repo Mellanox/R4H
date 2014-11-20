@@ -2,7 +2,7 @@ package com.mellanox.r4h;
 
 import java.util.AbstractMap.SimpleEntry;
 
-import com.mellanox.jxio.MsgPool;
+import org.accelio.jxio.MsgPool;
 import com.mellanox.r4h.R4HEventHandler;
 
 class JXIOClientResource extends SimpleEntry<R4HEventHandler, MsgPool> {

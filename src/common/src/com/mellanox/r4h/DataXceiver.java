@@ -50,13 +50,13 @@ import org.apache.hadoop.hdfs.protocol.proto.DataTransferProtos.BlockOpResponseP
 import org.apache.hadoop.hdfs.protocol.proto.DataTransferProtos.Status;
 import org.apache.hadoop.hdfs.protocolPB.PBHelper;
 
-import com.mellanox.jxio.ClientSession;
-import com.mellanox.jxio.EventName;
-import com.mellanox.jxio.EventQueueHandler;
-import com.mellanox.jxio.EventReason;
-import com.mellanox.jxio.Msg;
-import com.mellanox.jxio.ServerSession;
-import com.mellanox.jxio.ServerSession.SessionKey;
+import org.accelio.jxio.ClientSession;
+import org.accelio.jxio.EventName;
+import org.accelio.jxio.EventQueueHandler;
+import org.accelio.jxio.EventReason;
+import org.accelio.jxio.Msg;
+import org.accelio.jxio.ServerSession;
+import org.accelio.jxio.ServerSession.SessionKey;
 
 import org.apache.hadoop.hdfs.server.datanode.BlockReceiverBridge;
 import org.apache.hadoop.hdfs.server.datanode.CachingStrategy;

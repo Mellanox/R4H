@@ -31,13 +31,13 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.io.Stringifier;
 import org.apache.hadoop.util.StringUtils;
 
-import com.mellanox.jxio.EventQueueHandler;
-import com.mellanox.jxio.Msg;
-import com.mellanox.jxio.MsgPool;
-import com.mellanox.jxio.ServerPortal;
-import com.mellanox.jxio.ServerSession;
-import com.mellanox.jxio.EventQueueHandler.Callbacks;
-import com.mellanox.jxio.WorkerCache.Worker;
+import org.accelio.jxio.EventQueueHandler;
+import org.accelio.jxio.Msg;
+import org.accelio.jxio.MsgPool;
+import org.accelio.jxio.ServerPortal;
+import org.accelio.jxio.ServerSession;
+import org.accelio.jxio.EventQueueHandler.Callbacks;
+import org.accelio.jxio.WorkerCache.Worker;
 
 public class ServerPortalWorker implements Worker {
 	private static final Log LOG = LogFactory.getLog(ServerPortalWorker.class.getName());

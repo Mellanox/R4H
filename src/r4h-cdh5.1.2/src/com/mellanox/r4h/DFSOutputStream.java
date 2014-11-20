@@ -104,12 +104,12 @@ import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
 import com.google.common.cache.RemovalListener;
 import com.google.common.cache.RemovalNotification;
-import com.mellanox.jxio.ClientSession;
-import com.mellanox.jxio.ClientSession.Callbacks;
-import com.mellanox.jxio.EventName;
-import com.mellanox.jxio.EventReason;
-import com.mellanox.jxio.Msg;
-import com.mellanox.jxio.MsgPool;
+import org.accelio.jxio.ClientSession;
+import org.accelio.jxio.ClientSession.Callbacks;
+import org.accelio.jxio.EventName;
+import org.accelio.jxio.EventReason;
+import org.accelio.jxio.Msg;
+import org.accelio.jxio.MsgPool;
 import com.mellanox.r4h.client.HdfsDataOutputStream.SyncFlag;
 
 /****************************************************************
@@ -369,7 +369,7 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 		}
 	}
 
-	class CSCallbacks implements com.mellanox.jxio.ClientSession.Callbacks {
+	class CSCallbacks implements org.accelio.jxio.ClientSession.Callbacks {
 
 		private long countPacketArrived;
 		private boolean wasSessionEstablished;

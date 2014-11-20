@@ -12,12 +12,12 @@ import java.util.Arrays;
 
 import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
 
-import com.mellanox.jxio.exceptions.JxioGeneralException;
-import com.mellanox.jxio.exceptions.JxioQueueOverflowException;
-import com.mellanox.jxio.exceptions.JxioSessionClosedException;
-import com.mellanox.jxio.ServerSession;
-import com.mellanox.jxio.ClientSession;
-import com.mellanox.jxio.Msg;
+import org.accelio.jxio.exceptions.JxioGeneralException;
+import org.accelio.jxio.exceptions.JxioQueueOverflowException;
+import org.accelio.jxio.exceptions.JxioSessionClosedException;
+import org.accelio.jxio.ServerSession;
+import org.accelio.jxio.ClientSession;
+import org.accelio.jxio.Msg;
 
 import org.apache.commons.logging.Log;
 

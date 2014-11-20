@@ -31,14 +31,14 @@ import org.apache.hadoop.hdfs.server.datanode.DataNode;
 import org.apache.hadoop.hdfs.server.datanode.DataNodeBridge;
 import org.apache.hadoop.util.StringUtils;
 
-import com.mellanox.jxio.EventName;
-import com.mellanox.jxio.EventQueueHandler;
-import com.mellanox.jxio.EventReason;
-import com.mellanox.jxio.ServerPortal;
-import com.mellanox.jxio.ServerSession;
-import com.mellanox.jxio.ServerSession.SessionKey;
-import com.mellanox.jxio.WorkerCache.Worker;
-import com.mellanox.jxio.WorkerCache.WorkerProvider;
+import org.accelio.jxio.EventName;
+import org.accelio.jxio.EventQueueHandler;
+import org.accelio.jxio.EventReason;
+import org.accelio.jxio.ServerPortal;
+import org.accelio.jxio.ServerSession;
+import org.accelio.jxio.ServerSession.SessionKey;
+import org.accelio.jxio.WorkerCache.Worker;
+import org.accelio.jxio.WorkerCache.WorkerProvider;
 
 /**
  * R4H's parallel class to the original org.apache.hadoop.hdfs.server.datanode.DataXceiverServer

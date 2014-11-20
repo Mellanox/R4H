@@ -33,7 +33,7 @@ import org.apache.hadoop.util.StringUtils;
 
 import sun.awt.ScrollPaneWheelScroller;
 
-import com.mellanox.jxio.ServerPortal;
+import org.accelio.jxio.ServerPortal;
 import com.mellanox.r4h.AsyncFileOutputStream;
 import com.mellanox.r4h.R4HProtocol;
 import com.mellanox.r4h.ServerPortalWorker;
