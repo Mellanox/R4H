@@ -2096,7 +2096,7 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 						LOG.trace("Going to wait on dataQ indefinitely...");
 					}
 					synchronized (dataQueue) {
-						dataQueue.wait(10);
+						dataQueue.wait(1000);
 					}
 				} catch (InterruptedException e) {
 					// If we get interrupted while waiting to queue data, we still need to get rid
