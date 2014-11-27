@@ -209,18 +209,25 @@ class DataXceiverServer implements Runnable {
 		}
 	}
 
-	synchronized void returnServerWorkerToPool(ServerSession ss) {
+	synchronized void returnServerWorkerToPool(ServerSession ss, boolean needIOThreadInit) {
 		if (sessionToWorkerHashtable.containsKey(ss)) {
 			DataXceiver dxc = sessionToWorkerHashtable.get(ss);
 			ServerPortalWorker spw = dxc.getServerPortalWorker();
 			sessionToWorkerHashtable.remove(ss);
-			List<Runnable> remainingTasks = spw.getPacketAsyncIOExecutor().shutdownNow();
-			if (!remainingTasks.isEmpty()) {
-				LOG.warn(String.format("Shutting down IO thread with %d remaining unexecuted tasks", remainingTasks.size()));
+			if (needIOThreadInit) {
+				LOG.warn("IO thread init requested. Allocating a new executor");
+				List<Runnable> remainingTasks = spw.getPacketAsyncIOExecutor().shutdownNow();
+				if (!remainingTasks.isEmpty()) {
+					LOG.warn(String.format("Shutting down IO thread with %d remaining unexecuted tasks", remainingTasks.size()));
+				}
+				spw.setPacketAsyncIOExecutor(Executors.newSingleThreadExecutor());
 			}
-			spw.setPacketAsyncIOExecutor(Executors.newSingleThreadExecutor());
+			
+			// Adding worker to pool before marking it as free is necessary
+			// This way JXIO does not supply it as a hinted before it's back in the pool
 			spPool.add(spw);
 			spw.setFree(true);
+			
 			if (LOG.isDebugEnabled()) {
 				LOG.debug("returned SPW to pool. poolSize=" + spPool.size());
 			}

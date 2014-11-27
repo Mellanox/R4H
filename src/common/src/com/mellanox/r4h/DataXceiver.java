@@ -99,6 +99,7 @@ class DataXceiver extends Receiver {
 	private boolean clientSessionClosed = false;
 	private ServerPortalWorker worker;
 	boolean clientSessionCloseEventExpected = true;
+	boolean returnedWorkerToPool = false;
 
 	class SSCallbacks implements ServerSession.Callbacks {
 		@Override
@@ -145,7 +146,6 @@ class DataXceiver extends Receiver {
 
 		@Override
 		public void onSessionEvent(EventName session_event, EventReason reason) {
-
 			String logmsg = String.format("Server Session event: event=%s reason=%s ss=%s uri=%s", session_event, reason, serverSession, uri);
 			switch (session_event) {
 				case SESSION_CLOSED:
@@ -182,9 +182,12 @@ class DataXceiver extends Receiver {
 					onFlightMsgs.clear();
 					clientOnFlightNumMsgs = 0;
 				}
-				dxcs.returnServerWorkerToPool(serverSession);
 			} else if (onFlightMsgs.size() > 0) {
 				LOG.warn("Server session closed but there are still messages on flight for proxy client - waiting for client close event to discard messages and return ServerWorker to pool");
+			}
+			if (!returnedWorkerToPool) {
+				returnedWorkerToPool = true;
+				dxcs.returnServerWorkerToPool(serverSession, true /* needIOThreadInit */);
 			}
 
 		}
@@ -275,7 +278,11 @@ class DataXceiver extends Receiver {
 				}
 				onFlightMsgs.clear();
 				clientOnFlightNumMsgs = 0;
-				dxcs.returnServerWorkerToPool(serverSession);
+			}
+
+			if (!returnedWorkerToPool) {
+				returnedWorkerToPool = true;
+				dxcs.returnServerWorkerToPool(serverSession, true /* needIOThreadInit */);
 			}
 		}
 
@@ -472,6 +479,9 @@ class DataXceiver extends Receiver {
 								// LOG.trace("Going to queue reply ack:\npkt=" + pkt + "\nack=" + replyAck);
 								// }
 								replyPacketAck(msg, replyAck, true);
+								if (isLastPkt && !returnedWorkerToPool) { // returnedWorkerToPool will be double-checked inside asyncReturnWorkerToPool()
+									asyncReturnWorkerToPool();
+								}
 							} catch (Throwable t) {
 								LOG.error("Failed on submiting a reply ack: " + StringUtils.stringifyException(t));
 							}
@@ -568,8 +578,13 @@ class DataXceiver extends Receiver {
 			if (pipelinePktContext.isLastPacketInBlock()) {
 				blockReceiver.finalizeBlock();
 				asyncCloseClientSession();
+				replyPipelineAck(origMsg, expected, ack, SUCCESS, true);
+				if (!returnedWorkerToPool) { // returnedWorkerToPool will be double checked inside asyncReturnWorkerToPool()
+					asyncReturnWorkerToPool();
+				}
+			} else {
+				replyPipelineAck(origMsg, expected, ack, SUCCESS, true);
 			}
-			replyPipelineAck(origMsg, expected, ack, SUCCESS, true);
 		} catch (Throwable e) {
 			LOG.error("Failed during processing packet reply: " + blockReceiver.getBlock() + " " + oprHeader.getNumTargets() + " Exception "
 			        + StringUtils.stringifyException(e));
@@ -807,6 +822,18 @@ class DataXceiver extends Receiver {
 
 	void setServerPortalWorker(ServerPortalWorker spw) {
 		this.serverPortalWorker = spw;
+	}
+
+	private void asyncReturnWorkerToPool() {
+		serverPortalWorker.queueAsyncRunnable(new Runnable() {
+			@Override
+			public void run() {
+				if (!DataXceiver.this.returnedWorkerToPool) {
+					DataXceiver.this.returnedWorkerToPool = true;
+					DataXceiver.this.dxcs.returnServerWorkerToPool(serverSession, false /* needIOThreadInit */);
+				}
+			}
+		});
 	}
 
 	private void asyncCloseServerSession() {
