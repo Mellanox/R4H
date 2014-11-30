@@ -88,6 +88,7 @@ import org.apache.hadoop.security.AccessControlException;
 import org.apache.hadoop.security.token.SecretManager.InvalidToken;
 import org.apache.hadoop.security.token.Token;
 import org.apache.hadoop.util.Progressable;
+import org.apache.hadoop.util.StringUtils;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
@@ -150,7 +151,21 @@ public class DistributedFileSystem extends FileSystem {
 		this.dfs = new DFSClient(uri, conf, statistics);
 		this.uri = URI.create(uri.getScheme() + "://" + uri.getAuthority());
 		this.workingDir = getHomeDirectory();
+		createShutdownHook();
 		LOG.info("Using Mellanox RDMA acceleration");
+	}
+
+	private void createShutdownHook() {
+		Runtime.getRuntime().addShutdownHook(new Thread() {
+			@Override
+			public void run() {
+				try {
+					dfs.close();
+				} catch (IOException e) {
+					LOG.error("Failed to close DFSClient via shutdown hook. Got exception: " + StringUtils.stringifyException(e));
+				}
+			}
+		});
 	}
 
 	@Override
