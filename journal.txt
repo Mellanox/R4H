@@ -1,0 +1,100 @@
+#
+# R4H Change Log
+#
+
+================================
+Version: 1.2 - 2014-12-31
+================================
+
+NEW FEATURES:
+  
+  Feature #425202 - Improved streamer's batch processing logic
+
+  Feature #449726 - Avoid allocating new IO thread on clean flow
+
+  Feature #449728 - Workers return to pool earlier, after sending last reply
+
+FIXED:
+  
+  Bug #428539 - Client excludes all datanodes upon failure
+
+  Bug #425912 - Large job fails due to absence of getAdditionalMsgPool callback
+
+  Bug #425948 - No cleaning of async tasks submitted for IO thread on failure flow
+
+  Bug #448205 - Potential memory leak in Hive when R4H is enabled
+
+  Bug #431417 - Accelio resource leak on YARN's Application Master
+
+  Bug #429514 - Different callbacks share the same client session
+
+  Bug #424522 - User object leak on client side
+
+  
+KNOWN ISSUES:
+
+  Not supported by applications which explicitly require org.apache.hadoop.hdfs.DistributedFileSystem
+
+    - HBase master fails to boot with R4H when HDFS is in safe mode
+    
+    - Impala
+
+    - DFSAdmin
+
+  Connection establishment timeout and reconnect in 0.1% of blocks
+
+  Risk of unexpected behavior for applications that fork after allocating RDMA resources, though such applications were not observed
+
+================================
+Version: 1.1 - 2014-09-22
+================================
+
+NEW FEATURES:
+  
+  Feature #389935 - Move to JXIO forward model
+  
+  Feature #398747 - Support CDH v5.0.2
+  
+  Feature #398748 - Support HDP v2.1.2
+
+  Feature #398759 - Support more than 100 parallel files and overall jobs bigger than 1TB
+
+  Feature #419484 - Support CDH v5.1.2
+
+FIXED:
+  
+  Bug #389599 - Network thread crashes because of NullPointerException
+
+  Bug #416334 - Memory leak when DataXceivers aren't removed from list
+
+  Bug #416382 - Failing to retrieve worker from session->worker hashtable
+
+  Bug #416341 - Race condition on free workers between JXIO and DataXceiverServer
+
+  Bug #423640 - YARN Application Master hangs when using EQH caching
+
+LIMITATIONS:
+
+  No longer supporting CDH v4.4
+
+KNOWN ISSUES:
+  
+  Client hangs waiting for header ack once in every ~10K connections
+  
+================================
+Version: 1.0 - 2014-05-07
+================================
+
+R4H is a plugin for Hadoop Distributed FileSystem (HDFS) which accelerates HDFS by
+using RDMA (Remote Direct Memory Access) technology as a parallel data path to the 
+current TCP implementation. Currently R4H enables HDFS Write operations over RDMA
+using Mellanox ConnectX® interconnect for Ethernet and InfiniBand fabrics.
+
+LIMITATIONS:
+
+  Currently supports only Cloudera Hadoop (CDH) v4.4
+
+KNOWN ISSUES:
+  
+  Unable to run jobs with more than 100 parallel files and over 1TB overall
+  
