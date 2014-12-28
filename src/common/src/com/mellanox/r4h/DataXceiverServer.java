@@ -222,7 +222,6 @@ class DataXceiverServer implements Runnable {
 				}
 				spw.setPacketAsyncIOExecutor(Executors.newSingleThreadExecutor());
 			}
-			
 			// Adding worker to pool before marking it as free is necessary
 			// This way JXIO does not supply it as a hinted before it's back in the pool
 			spPool.add(spw);

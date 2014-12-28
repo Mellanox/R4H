@@ -147,17 +147,20 @@ class DataXceiver extends Receiver {
 		@Override
 		public void onSessionEvent(EventName session_event, EventReason reason) {
 			String logmsg = String.format("Server Session event: event=%s reason=%s ss=%s uri=%s", session_event, reason, serverSession, uri);
+			boolean needIOThreadInit = false;
 			switch (session_event) {
 				case SESSION_CLOSED:
 					if (onFlightMsgs.size() == 0) {
 						LOG.info(logmsg);
 					} else {
 						LOG.error(logmsg);
+						needIOThreadInit = true;
 					}
 					break;
 				case SESSION_ERROR:
 				case SESSION_REJECT:
 					LOG.error(logmsg);
+					needIOThreadInit = true;
 					break;
 				default:
 					break;
@@ -182,12 +185,13 @@ class DataXceiver extends Receiver {
 					onFlightMsgs.clear();
 					clientOnFlightNumMsgs = 0;
 				}
+				if (!returnedWorkerToPool) {
+					returnedWorkerToPool = true;
+					dxcs.returnServerWorkerToPool(serverSession, needIOThreadInit);
+				}
+
 			} else if (onFlightMsgs.size() > 0) {
 				LOG.warn("Server session closed but there are still messages on flight for proxy client - waiting for client close event to discard messages and return ServerWorker to pool");
-			}
-			if (!returnedWorkerToPool) {
-				returnedWorkerToPool = true;
-				dxcs.returnServerWorkerToPool(serverSession, true /* needIOThreadInit */);
 			}
 
 		}
@@ -224,7 +228,7 @@ class DataXceiver extends Receiver {
 				}
 			} catch (Throwable t) {
 				LOG.error("Failed to process reply. ", t);
-				asyncCloseServerSession();
+				close();
 			}
 		}
 
@@ -244,12 +248,14 @@ class DataXceiver extends Receiver {
 		public void onSessionEvent(EventName session_event, EventReason reason) {
 			String logmsg = String.format("Client Session event: event=%s reason=%s ss=%s clientOnFlight=%d", session_event, reason, serverSession,
 			        clientOnFlightNumMsgs);
+			boolean needIOThreadInit = false;
 			switch (session_event) {
 				case SESSION_CLOSED:
 					if ((DataXceiver.this.clientSessionCloseEventExpected) && (clientOnFlightNumMsgs == 0)) {
 						LOG.info(logmsg);
 					} else {
 						LOG.error(logmsg);
+						needIOThreadInit = true;
 					}
 					break;
 				case SESSION_ERROR:
@@ -259,6 +265,7 @@ class DataXceiver extends Receiver {
 					if ((serverSession != null) && (!serverSession.getIsClosing())) {
 						serverSession.close();
 					}
+					needIOThreadInit = true;
 					break;
 				default:
 					break;
@@ -278,12 +285,13 @@ class DataXceiver extends Receiver {
 				}
 				onFlightMsgs.clear();
 				clientOnFlightNumMsgs = 0;
+				
+				if (!returnedWorkerToPool) {
+					returnedWorkerToPool = true;
+					dxcs.returnServerWorkerToPool(serverSession, needIOThreadInit);
+				}
 			}
 
-			if (!returnedWorkerToPool) {
-				returnedWorkerToPool = true;
-				dxcs.returnServerWorkerToPool(serverSession, true /* needIOThreadInit */);
-			}
 		}
 
 	}
@@ -479,7 +487,8 @@ class DataXceiver extends Receiver {
 								// LOG.trace("Going to queue reply ack:\npkt=" + pkt + "\nack=" + replyAck);
 								// }
 								replyPacketAck(msg, replyAck, true);
-								if (isLastPkt && !returnedWorkerToPool) { // returnedWorkerToPool will be double-checked inside asyncReturnWorkerToPool()
+								if (isLastPkt && !returnedWorkerToPool) { // returnedWorkerToPool will be double-checked inside
+									                                      // asyncReturnWorkerToPool()
 									asyncReturnWorkerToPool();
 								}
 							} catch (Throwable t) {
@@ -718,7 +727,9 @@ class DataXceiver extends Receiver {
 	}
 
 	void close() {
-		this.serverPortalWorker.clearAsyncOprQueue();
+		if (!this.returnedWorkerToPool) {
+			this.serverPortalWorker.clearAsyncOprQueue();
+		}
 		if ((DataXceiver.this.clientSession != null) && (!DataXceiver.this.clientSession.getIsClosing())) {
 			LOG.info("Closing mirror client session: " + DataXceiver.this.clientSession);
 			clientSessionCloseEventExpected = true;

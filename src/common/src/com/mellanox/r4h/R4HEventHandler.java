@@ -39,7 +39,6 @@ public class R4HEventHandler extends EventQueueHandler {
 	}
 
 	private final static Log LOG = LogFactory.getLog(R4HEventHandler.class.getName());
-	public static Object o = new Object();
 	private boolean ignoreBreak = false;
 
 	@Override

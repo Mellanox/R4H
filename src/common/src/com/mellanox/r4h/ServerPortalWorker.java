@@ -28,7 +28,6 @@ import java.util.concurrent.Executors;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.apache.hadoop.io.Stringifier;
 import org.apache.hadoop.util.StringUtils;
 
 import org.accelio.jxio.EventQueueHandler;
@@ -142,9 +141,7 @@ public class ServerPortalWorker implements Worker {
 
 	public void queueAsyncReply(ServerSession ss, Msg msg, List<Msg> onFlightMsgs) {
 		asyncOprQueue.add(new AsyncReply(ss, msg, onFlightMsgs));
-		// if (msgReplyQueue.size() >= REPLY_QUEUE_TRESHOLD_FOR_BREAK_EVENT_LOOP) {
 		eqh.breakEventLoop();
-		// }
 	}
 
 	void processReplies() {
