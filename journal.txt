@@ -6,13 +6,15 @@
 Version: 1.2 - 2014-12-31
 ================================
 
-NEW FEATURES:
+CHANGES:
   
-  Feature #425202 - Improved streamer's batch processing logic
+  Stability and failure handling improvments
 
-  Feature #449726 - Avoid allocating new IO thread on clean flow
+  Task #425202 - Improved streamer's batch processing logic
 
-  Feature #449728 - Workers return to pool earlier, after sending last reply
+  Task #449726 - Avoid allocating new IO thread on clean flow
+
+  Task #449728 - Workers return to pool earlier, after sending last reply
 
 FIXED:
   
@@ -30,20 +32,23 @@ FIXED:
 
   Bug #424522 - User object leak on client side
 
+  Bug #468918 - Header ack timeout on first request of 0.1% of new block sessions (Accelio bugs fix)
+
   
-KNOWN ISSUES:
+KNOWN LIMITATIONS:
 
   Not supported by applications which explicitly require org.apache.hadoop.hdfs.DistributedFileSystem
 
     - HBase master fails to boot with R4H when HDFS is in safe mode
+	Work around: wait for HDFS to leave safe mode and only then start Hbase
     
     - Impala
 
     - DFSAdmin
 
-  Connection establishment timeout and reconnect in 0.1% of blocks
+KNOWN ISSUES:
 
-  Risk of unexpected behavior for applications that fork after allocating RDMA resources, though such applications were not observed
+  Risk of unexpected behavior for applications that fork after allocating JXIO/Accelio/RDMA resources, though such applications were not observed
 
 ================================
 Version: 1.1 - 2014-09-22
