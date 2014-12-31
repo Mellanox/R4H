@@ -24,7 +24,7 @@ FIXED:
 
   Bug #425948 - No cleaning of async tasks submitted for IO thread on failure flow
 
-  Bug #448205 - Potential memory leak in Hive when R4H is enabled
+  Bug #448205 - memory leak messages in Hive shell on exit when R4H is enabled
 
   Bug #431417 - Accelio resource leak on YARN's Application Master
 
