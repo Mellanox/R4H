@@ -96,7 +96,7 @@ public class ServerPortalWorker implements Worker {
 		this.numOfMsgsToBind = numOfMsgsToBind;
 		packetAsyncIOExecutor = Executors.newSingleThreadExecutor();
 		this.eqh = new R4HEventHandler(onDynamicMsgPoolAllocation, onEqhBreak);
-		this.sp = new ServerPortal(eqh, uri);
+		this.sp = new ServerPortal(eqh, uri, null);
 		this.th = new Thread(eqh);
 		this.th.setName(String.format("ServerPortalWorker-%d-ExecutorHashCode=%d", this.th.getId(), packetAsyncIOExecutor.hashCode()));
 		MsgPool msgPool = allocateBuffers();
