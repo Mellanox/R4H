@@ -18,12 +18,12 @@ public class DFSClientConfBridge extends Conf {
 	private static final String HEADER_ACK_CLIENT_TIMEOUT_PARAM_NAME = "r4h.client.header.ack.timeout";
 	// The time to wait for header ack before pronouncing failure:
 	private long headerAckTimeoutUsec;
-	
+
 	public DFSClientConfBridge(Configuration conf) {
 		super(conf);
-		this.headerAckTimeoutUsec = 1000000*conf.getInt(HEADER_ACK_CLIENT_TIMEOUT_PARAM_NAME, HEADER_ACK_CLIENT_TIMEOUT_SECONDS_DEFAULT);
+		this.headerAckTimeoutUsec = 1000000 * conf.getInt(HEADER_ACK_CLIENT_TIMEOUT_PARAM_NAME, HEADER_ACK_CLIENT_TIMEOUT_SECONDS_DEFAULT);
 	}
-	
+
 	/**
 	 * 
 	 * @return headerAckTimeoutUsec
@@ -352,5 +352,17 @@ public class DFSClientConfBridge extends Conf {
 
 	public int getTimeWindow() {
 		return timeWindow;
+	}
+
+	public boolean connectToDnViaHostname() {
+		return connectToDnViaHostname;
+	}
+
+	public DataChecksum createChecksum() throws IOException {
+		return createChecksum(null);
+	}
+
+	public int socketTimeout() {
+		return socketTimeout;
 	}
 }

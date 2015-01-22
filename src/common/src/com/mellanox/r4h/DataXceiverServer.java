@@ -60,7 +60,7 @@ class DataXceiverServer implements Runnable {
 	private int numOfServerPortalWorkers;
 	private final URI workerUri;
 	final ConcurrentLinkedQueue<ServerPortalWorker> spPool;
-	final Hashtable<ServerSession, DataXceiver> sessionToWorkerHashtable;
+	final Hashtable<ServerSession, DataXceiverBase> sessionToWorkerHashtable;
 	private boolean conCacheEnable;
 
 	private class DXSCallbacks implements ServerPortal.Callbacks {
@@ -110,7 +110,7 @@ class DataXceiverServer implements Runnable {
 					LOG.fatal("Failed to pull server worker. Rejecting new session request");
 					sp.reject(sesKey, EventReason.UNSUCCESSFUL, "Failed to pull server worker");
 				} else {
-					DataXceiver dxc = new DataXceiver(DataXceiverServer.this, spw, sesKey);
+					DataXceiverBase dxc = new DataXceiver(DataXceiverServer.this, spw, sesKey);
 					attachServerPortalWorker(dxc);
 				}
 			} catch (Throwable t) {
@@ -150,7 +150,7 @@ class DataXceiverServer implements Runnable {
 		this.numOfServerPortalWorkers = dnConf.getInt(NUM_OF_PRE_ALLOC_SERVER_PORTAL_WROKERS_PARAM_NAME,
 		        NUM_OF_PRE_ALLOC_SERVER_PORTAL_WORKERS_DEFAULT);
 		LOG.info(String.format("Starting ahead %d server portal worker", numOfServerPortalWorkers));
-		this.sessionToWorkerHashtable = new Hashtable<ServerSession, DataXceiver>();
+		this.sessionToWorkerHashtable = new Hashtable<ServerSession, DataXceiverBase>();
 		workerUri = new URI(String.format("rdma://%s:0", this.uri.getHost()));
 		this.spPool = new ConcurrentLinkedQueue<ServerPortalWorker>();
 		for (int i = 0; i < this.numOfServerPortalWorkers; i++) {
@@ -199,7 +199,7 @@ class DataXceiverServer implements Runnable {
 		        uri, sessionToWorkerHashtable.size());
 	}
 
-	synchronized void attachServerPortalWorker(DataXceiver dxc) {
+	synchronized void attachServerPortalWorker(DataXceiverBase dxc) {
 		sessionToWorkerHashtable.put(dxc.getSessionServer(), dxc);
 		ServerPortalWorker spw = dxc.getServerPortalWorker();
 		dxc.setServerPortalWorker(spw);
@@ -211,7 +211,7 @@ class DataXceiverServer implements Runnable {
 
 	synchronized void returnServerWorkerToPool(ServerSession ss, boolean needIOThreadInit) {
 		if (sessionToWorkerHashtable.containsKey(ss)) {
-			DataXceiver dxc = sessionToWorkerHashtable.get(ss);
+			DataXceiverBase dxc = sessionToWorkerHashtable.get(ss);
 			ServerPortalWorker spw = dxc.getServerPortalWorker();
 			sessionToWorkerHashtable.remove(ss);
 			if (needIOThreadInit) {

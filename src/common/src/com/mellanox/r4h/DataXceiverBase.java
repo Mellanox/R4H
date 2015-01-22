@@ -17,9 +17,11 @@
 
 package com.mellanox.r4h;
 
+import static org.apache.hadoop.hdfs.protocol.datatransfer.DataTransferProtoUtil.fromProto;
 import static org.apache.hadoop.hdfs.protocol.proto.DataTransferProtos.Status.ERROR;
 import static org.apache.hadoop.hdfs.protocol.proto.DataTransferProtos.Status.ERROR_ACCESS_TOKEN;
 import static org.apache.hadoop.hdfs.protocol.proto.DataTransferProtos.Status.SUCCESS;
+import static org.apache.hadoop.hdfs.protocolPB.PBHelper.vintPrefixed;
 
 import java.io.BufferedInputStream;
 import java.io.DataInputStream;
@@ -33,23 +35,22 @@ import java.util.Arrays;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.apache.hadoop.hdfs.ShortCircuitShm.SlotId;
+import org.apache.hadoop.hdfs.StorageType;
 import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
 import org.apache.hadoop.hdfs.protocol.ExtendedBlock;
 import org.apache.hadoop.hdfs.protocol.datatransfer.BlockConstructionStage;
+import org.apache.hadoop.hdfs.protocol.datatransfer.DataTransferProtoUtil;
+import org.apache.hadoop.hdfs.protocol.datatransfer.DataTransferProtocol;
 import org.apache.hadoop.hdfs.protocol.datatransfer.Op;
 import org.apache.hadoop.hdfs.protocol.datatransfer.PacketHeader;
 import org.apache.hadoop.hdfs.protocol.datatransfer.PipelineAck;
-import org.apache.hadoop.hdfs.protocol.datatransfer.Receiver;
-import org.apache.hadoop.hdfs.protocol.datatransfer.Sender;
 import org.apache.hadoop.hdfs.protocol.proto.DataTransferProtos.BlockOpResponseProto;
+import org.apache.hadoop.hdfs.protocol.proto.DataTransferProtos.CachingStrategyProto;
+import org.apache.hadoop.hdfs.protocol.proto.DataTransferProtos.OpWriteBlockProto;
 import org.apache.hadoop.hdfs.protocol.proto.DataTransferProtos.Status;
 import org.apache.hadoop.hdfs.protocolPB.PBHelper;
-
 import org.accelio.jxio.ClientSession;
 import org.accelio.jxio.EventName;
 import org.accelio.jxio.EventQueueHandler;
@@ -79,13 +80,13 @@ import org.apache.hadoop.hdfs.security.token.block.BlockTokenSecretManager;
  *      original serial flow of processing HDFS operation into an async flow
  *      with JXIO RDMA library CURRENTLY: only HDFS WRITE operation is supported
  */
-class DataXceiver extends Receiver {
-	private final static Log LOG = LogFactory.getLog(DataXceiver.class);
+abstract class DataXceiverBase {
+	private final static Log LOG = LogFactory.getLog(DataXceiverBase.class);
 	private ClientSession clientSession;
 	private boolean isFirstRequest = true;
 	private boolean isFirstReply = true;
 	private DataNodeBridge dnBridge;
-	private WriteOprHeader oprHeader;
+	protected WriteOprHeader oprHeader;
 	public BlockReceiverBridge blockReceiver;
 	private DataXceiverServer dxcs;
 	private ServerSession serverSession;
@@ -123,8 +124,8 @@ class DataXceiver extends Receiver {
 			} catch (Throwable t) {
 				LOG.error("DataXceiver exception during processing request.", t);
 
-				if ((DataXceiver.this.serverSession != null) && (!DataXceiver.this.serverSession.getIsClosing())) {
-					DataXceiver.this.serverSession.close();
+				if ((DataXceiverBase.this.serverSession != null) && (!DataXceiverBase.this.serverSession.getIsClosing())) {
+					DataXceiverBase.this.serverSession.close();
 				}
 			}
 		}
@@ -140,7 +141,7 @@ class DataXceiver extends Receiver {
 				        serverSession.getIsClosing()));
 			}
 			onFlightMsgs.remove(msg);
-			DataXceiver.this.close();
+			DataXceiverBase.this.close();
 			return releaseMsg;
 		}
 
@@ -206,7 +207,7 @@ class DataXceiver extends Receiver {
 			}
 			try {
 				if (isFirstReply) {
-					LOG.info("Going to process pipeline reply for OPR header. uri=" + DataXceiver.this.uri);
+					LOG.info("Going to process pipeline reply for OPR header. uri=" + DataXceiverBase.this.uri);
 					processOPRHeaderReply(msg);
 				} else {
 					final Msg fmsg = msg;
@@ -241,7 +242,7 @@ class DataXceiver extends Receiver {
 		public void onMsgError(Msg msg, EventReason reason) {
 			LOG.error(String.format("Client Msg error: MSG=%s reason=%s ss=%s ss.isClosing=%s cs=%s cs.isClosing=%s", msg, reason, serverSession,
 			        serverSession.getIsClosing(), clientSession, clientSession.getIsClosing()));
-			DataXceiver.this.close();
+			DataXceiverBase.this.close();
 		}
 
 		@Override
@@ -251,7 +252,7 @@ class DataXceiver extends Receiver {
 			boolean needIOThreadInit = false;
 			switch (session_event) {
 				case SESSION_CLOSED:
-					if ((DataXceiver.this.clientSessionCloseEventExpected) && (clientOnFlightNumMsgs == 0)) {
+					if ((DataXceiverBase.this.clientSessionCloseEventExpected) && (clientOnFlightNumMsgs == 0)) {
 						LOG.info(logmsg);
 					} else {
 						LOG.error(logmsg);
@@ -285,7 +286,7 @@ class DataXceiver extends Receiver {
 				}
 				onFlightMsgs.clear();
 				clientOnFlightNumMsgs = 0;
-				
+
 				if (!returnedWorkerToPool) {
 					returnedWorkerToPool = true;
 					dxcs.returnServerWorkerToPool(serverSession, needIOThreadInit);
@@ -296,26 +297,35 @@ class DataXceiver extends Receiver {
 
 	}
 
-	DataXceiver(DataXceiverServer dxcs, ServerPortalWorker spw, SessionKey sKey) {
+	DataXceiverBase(DataXceiverServer dxcs, ServerPortalWorker spw, SessionKey sKey) {
 		this.dxcs = dxcs;
 		this.worker = spw;
 		this.dnBridge = dxcs.dnBridge;
 		this.packetAsyncIOExecutor = spw.getPacketAsyncIOExecutor();
 		this.uri = sKey.getUri();
-		DataXceiver.SSCallbacks ssCbs = this.new SSCallbacks();
+		DataXceiverBase.SSCallbacks ssCbs = this.new SSCallbacks();
 		serverSession = new ServerSession(sKey, ssCbs);
 	}
 
 	private void processOPRHeaderRequest(Msg msg) throws IOException, SecurityException, NoSuchFieldException, IllegalArgumentException,
 	        IllegalAccessException, NoSuchMethodException, URISyntaxException {
 		if (LOG.isTraceEnabled()) {
-			LOG.trace("Processing block header request. uri=" + DataXceiver.this.uri);
+			LOG.trace("Processing block header request. uri=" + DataXceiverBase.this.uri);
 		}
 
 		msg.getIn().position(0);
-		in = new DataInputStream(new ByteBufferInputStream(msg.getIn()));
-		Op op = readOp();
-		processOp(op);
+		DataInputStream in = new DataInputStream(new ByteBufferInputStream(msg.getIn()));
+		final short version = in.readShort();
+		if (version != DataTransferProtocol.DATA_TRANSFER_VERSION) {
+			in.close();
+			throw new IOException("Version Mismatch (Expected: " + DataTransferProtocol.DATA_TRANSFER_VERSION + ", Received: " + version + " )");
+		}
+		Op op = Op.read(in);
+		if (op != Op.WRITE_BLOCK) {
+			throw new IOException("Unknown op " + op + " in data stream");			
+		} 
+		
+		parseOpWriteBlock(in);
 
 		// updateCurrentThreadName("Receiving block " + blk); TODO:Need to copy method - is that really necessary ?
 
@@ -325,7 +335,7 @@ class DataXceiver extends Receiver {
 		}
 
 		if (LOG.isDebugEnabled()) {
-			LOG.debug("uri= " + DataXceiver.this.uri + "\nopWriteBlock: stage=" + oprHeader.getStage() + ", clientname=" + oprHeader.getClientName()
+			LOG.debug("uri= " + DataXceiverBase.this.uri + "\nopWriteBlock: stage=" + oprHeader.getStage() + ", clientname=" + oprHeader.getClientName()
 			        + "\n  block  =" + oprHeader.getBlock() + ", newGs=" + oprHeader.getLatestGenerationStamp() + ", bytesRcvd=["
 			        + oprHeader.getMinBytesRcvd() + ", " + oprHeader.getMaxBytesRcvd() + "]" + "\n  targets=" + Arrays.asList(oprHeader.getTargets())
 			        + "; pipelineSize=" + oprHeader.getPipelineSize() + ", srcDataNode=" + oprHeader.getSrcDataNode() + ", isDatanode="
@@ -415,7 +425,7 @@ class DataXceiver extends Receiver {
 
 	private void processPacketRequest(final Msg msg) {
 		if (LOG.isTraceEnabled()) {
-			LOG.trace("Processing packet request. uri=" + DataXceiver.this.uri);
+			LOG.trace("Processing packet request. uri=" + DataXceiverBase.this.uri);
 		}
 
 		msg.getIn().position(0);
@@ -451,7 +461,7 @@ class DataXceiver extends Receiver {
 			final long offsetInBlock = pkt.getOffsetInBlock();
 
 			if (LOG.isDebugEnabled()) {
-				LOG.debug("After processing packet: " + pkt + "\nuri=" + DataXceiver.this.uri);
+				LOG.debug("After processing packet: " + pkt + "\nuri=" + DataXceiverBase.this.uri);
 			}
 
 			if (!hasPipeline()) {
@@ -544,9 +554,9 @@ class DataXceiver extends Receiver {
 			LOG.warn("Cannot reply response while handling packet processing exception because pkt header is NULL");
 		}
 
-		if ((DataXceiver.this.clientSession != null) && (!DataXceiver.this.clientSession.getIsClosing())) {
+		if ((DataXceiverBase.this.clientSession != null) && (!DataXceiverBase.this.clientSession.getIsClosing())) {
 			clientSessionCloseEventExpected = true;
-			DataXceiver.this.clientSession.close();
+			DataXceiverBase.this.clientSession.close();
 		}
 	}
 
@@ -647,9 +657,9 @@ class DataXceiver extends Receiver {
 	}
 
 	private void openPipelineConnection() throws URISyntaxException {
-		CSCallbacks csCBs = DataXceiver.this.new CSCallbacks();
+		CSCallbacks csCBs = DataXceiverBase.this.new CSCallbacks();
 
-		String clientURI = DataXceiver.this.uri.toString();
+		String clientURI = DataXceiverBase.this.uri.toString();
 		int index = clientURI.indexOf("&clientHash=");
 		URI uri = R4HProtocol.createPipelineURI(oprHeader.getTargets(), clientURI.substring(index));
 		LOG.info("Open a proxy client session: " + uri);
@@ -660,9 +670,7 @@ class DataXceiver extends Receiver {
 		Msg mirror = msg.getMirror(false);
 		mirror.getOut().clear();
 		DataOutputStream mirrorOut = new DataOutputStream(new ByteBufferOutputStream(mirror.getOut()));
-		new Sender(mirrorOut).writeBlock(origBlk, oprHeader.getBlockToken(), oprHeader.getClientName(), oprHeader.getTargets(),
-		        oprHeader.getSrcDataNode(), oprHeader.getStage(), oprHeader.getPipelineSize(), oprHeader.getMinBytesRcvd(),
-		        oprHeader.getMaxBytesRcvd(), oprHeader.getLatestGenerationStamp(), oprHeader.getRequestedChecksum(), oprHeader.getCachingStrategy());
+		senderWriteBlock(mirrorOut, origBlk);
 		mirrorOut.flush();
 		clientOnFlightNumMsgs++;
 		R4HProtocol.wrappedSendRequest(clientSession, mirror, LOG);
@@ -730,14 +738,14 @@ class DataXceiver extends Receiver {
 		if (!this.returnedWorkerToPool) {
 			this.serverPortalWorker.clearAsyncOprQueue();
 		}
-		if ((DataXceiver.this.clientSession != null) && (!DataXceiver.this.clientSession.getIsClosing())) {
-			LOG.info("Closing mirror client session: " + DataXceiver.this.clientSession);
+		if ((DataXceiverBase.this.clientSession != null) && (!DataXceiverBase.this.clientSession.getIsClosing())) {
+			LOG.info("Closing mirror client session: " + DataXceiverBase.this.clientSession);
 			clientSessionCloseEventExpected = true;
-			DataXceiver.this.clientSession.close();
+			DataXceiverBase.this.clientSession.close();
 		}
 
 		if ((serverSession != null) && (!serverSession.getIsClosing())) {
-			LOG.info("Closing server session: " + DataXceiver.this.serverSession);
+			LOG.info("Closing server session: " + DataXceiverBase.this.serverSession);
 			serverSession.close();
 		}
 	}
@@ -745,21 +753,6 @@ class DataXceiver extends Receiver {
 	@Override
 	public String toString() {
 		return String.format("DataXceiver{EQH='%s', SS='%s', SC='%s'}", worker.eqh, serverSession, (clientSession == null) ? "-" : clientSession);
-	}
-
-	@Override
-	public void readBlock(final ExtendedBlock block, final Token<BlockTokenIdentifier> blockToken, final String clientName, final long blockOffset,
-	        final long length, final boolean sendChecksum, final CachingStrategy cachingStrategy) throws IOException {
-		// TODO Auto-generated method stub
-	}
-
-	@Override
-	public void writeBlock(final ExtendedBlock block, final Token<BlockTokenIdentifier> blockToken, final String clientname,
-	        final DatanodeInfo[] targets, final DatanodeInfo srcDataNode, final BlockConstructionStage stage, final int pipelineSize,
-	        final long minBytesRcvd, final long maxBytesRcvd, final long latestGenerationStamp, DataChecksum requestedChecksum,
-	        CachingStrategy cachingStrategy) throws IOException {
-		oprHeader = new WriteOprHeader(block, blockToken, clientname, targets, srcDataNode, stage, pipelineSize, minBytesRcvd, maxBytesRcvd,
-		        latestGenerationStamp, requestedChecksum, cachingStrategy);
 	}
 
 	// TODO: this method is copied from original DXC. Need to consider reuse instead, maybe by inheritance+reflection
@@ -791,38 +784,6 @@ class DataXceiver extends Receiver {
 		return true; // SUCCESS
 	}
 
-	@Override
-	public void transferBlock(ExtendedBlock blk, Token<BlockTokenIdentifier> blockToken, String clientName, DatanodeInfo[] targets)
-	        throws IOException {
-		// TODO Auto-generated method stub
-
-	}
-
-	@Override
-	public void requestShortCircuitFds(final ExtendedBlock blk, final Token<BlockTokenIdentifier> token, SlotId slotId, int maxVersion)
-	        throws IOException {
-		// TODO Auto-generated method stub
-
-	}
-
-	@Override
-	public void replaceBlock(ExtendedBlock blk, Token<BlockTokenIdentifier> blockToken, String delHint, DatanodeInfo source) throws IOException {
-		// TODO Auto-generated method stub
-
-	}
-
-	@Override
-	public void copyBlock(ExtendedBlock blk, Token<BlockTokenIdentifier> blockToken) throws IOException {
-		// TODO Auto-generated method stub
-
-	}
-
-	@Override
-	public void blockChecksum(ExtendedBlock blk, Token<BlockTokenIdentifier> blockToken) throws IOException {
-		// TODO Auto-generated method stub
-
-	}
-
 	public void setClientSession(ClientSession clientSession) {
 		this.clientSession = clientSession;
 	}
@@ -839,9 +800,9 @@ class DataXceiver extends Receiver {
 		serverPortalWorker.queueAsyncRunnable(new Runnable() {
 			@Override
 			public void run() {
-				if (!DataXceiver.this.returnedWorkerToPool) {
-					DataXceiver.this.returnedWorkerToPool = true;
-					DataXceiver.this.dxcs.returnServerWorkerToPool(serverSession, false /* needIOThreadInit */);
+				if (!DataXceiverBase.this.returnedWorkerToPool) {
+					DataXceiverBase.this.returnedWorkerToPool = true;
+					DataXceiverBase.this.dxcs.returnServerWorkerToPool(serverSession, false /* needIOThreadInit */);
 				}
 			}
 		});
@@ -852,15 +813,15 @@ class DataXceiver extends Receiver {
 
 			@Override
 			public void run() {
-				if ((DataXceiver.this.serverSession != null) && (!DataXceiver.this.serverSession.getIsClosing())) {
-					DataXceiver.this.serverSession.close();
+				if ((DataXceiverBase.this.serverSession != null) && (!DataXceiverBase.this.serverSession.getIsClosing())) {
+					DataXceiverBase.this.serverSession.close();
 				}
 			}
 		});
 	}
 
 	private void asyncCloseClientSession() {
-		final ClientSession cs = DataXceiver.this.clientSession;
+		final ClientSession cs = DataXceiverBase.this.clientSession;
 		if (cs != null) {
 			serverPortalWorker.queueAsyncRunnable(new Runnable() {
 
@@ -879,19 +840,17 @@ class DataXceiver extends Receiver {
 		return this.uri;
 	}
 
-	@Override
-	public void releaseShortCircuitFds(SlotId arg0) throws IOException {
-		// TODO Auto-generated method stub
-
-	}
-
-	@Override
-	public void requestShortCircuitShm(String arg0) throws IOException {
-		// TODO Auto-generated method stub
-
-	}
-
 	ServerPortalWorker getServerPortalWorker() {
 		return worker;
 	}
+
+	static protected CachingStrategy getCachingStrategy(CachingStrategyProto strategy) {
+		Boolean dropBehind = strategy.hasDropBehind() ? strategy.getDropBehind() : null;
+		Long readahead = strategy.hasReadahead() ? strategy.getReadahead() : null;
+		return new CachingStrategy(dropBehind, readahead);
+	}
+
+	abstract void parseOpWriteBlock(DataInputStream in) throws IOException;
+	
+	abstract void senderWriteBlock(DataOutputStream out, ExtendedBlock origBlk) throws IOException;
 }

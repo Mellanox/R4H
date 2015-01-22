@@ -223,7 +223,7 @@ public class WriteOprHeader {
 	// getAccessToken().write(out);
 	// }
 
-	int getPipelineSize() {
+	public int getPipelineSize() {
 		return pipelineSize;
 	}
 
@@ -239,7 +239,7 @@ public class WriteOprHeader {
 		return (targets != null) ? getTargets().length : 0;
 	}
 
-	DatanodeInfo[] getTargets() {
+	public DatanodeInfo[] getTargets() {
 		return targets;
 	}
 
