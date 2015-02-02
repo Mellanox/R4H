@@ -87,12 +87,9 @@
 
 	    <jar destfile="build/r4h.jar" basedir="build/" includes="**/*.class">
 	       <manifest>
-		       <section	name="RDMA For HDFS">
-			       <attribute name="Implementation-Title"
-				       value="${jar-title}"/>
+			<attribute name="Implementation-Title" value="${jar-title}"/>
 		       <attribute name="Implementation-Version" value="${gitver}"/>
-		       <attribute name="Implementation-Vendor" value="Mellanox"/>
-		       </section>
+		       <attribute name="Implementation-Vendor" value="Mellanox Technologies"/>
 		</manifest>
 	    </jar>
     </target>

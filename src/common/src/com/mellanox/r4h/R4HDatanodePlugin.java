@@ -20,6 +20,7 @@ package com.mellanox.r4h;
 import java.io.IOException;
 import java.net.URISyntaxException;
 
+import org.accelio.jxio.EventQueueHandler;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hdfs.server.datanode.DataNode;
@@ -52,7 +53,6 @@ public class R4HDatanodePlugin implements ServicePlugin {
 	 * @see org.apache.hadoop.util.ServicePlugin#start(java.lang.Object)
 	 */
 	public void start(Object service) {
-
 		LOG.debug("Starting plugin");
 		if (!(service instanceof DataNode)) {
 			throw new IllegalArgumentException("Unexpected service object type");
@@ -60,7 +60,7 @@ public class R4HDatanodePlugin implements ServicePlugin {
 		LOG.debug("Service object is DataNode");
 		dn = (DataNode) service;
 		dnExposer = new DataNodeBridge(dn);
-		
+
 		try {
 			dxs = new DataXceiverServer(dn);
 		} catch (URISyntaxException e) {
@@ -69,8 +69,12 @@ public class R4HDatanodePlugin implements ServicePlugin {
 		daemon = new Daemon(dxs);
 		daemon.setName(String.format("DataXceiverServer-JXIO-Listener-%d", daemon.getId()));
 		daemon.start();
+
 		LOG.info("Started");
-		LOG.debug(this.toString());
+		// JXIO version
+		LOG.info("JXIO version :\t" + EventQueueHandler.class.getPackage().getImplementationVersion());
+		// R4H version
+		LOG.info("R4H verison :\t" + DataXceiver.class.getPackage().getImplementationVersion());
 	}
 
 	/*
@@ -127,5 +131,4 @@ public class R4HDatanodePlugin implements ServicePlugin {
 			        daemon.isAlive() ? "TRUE" : "FALSE");
 		}
 	}
-
 }
