@@ -97,9 +97,16 @@ public class R4HDatanodePlugin implements ServicePlugin {
 			throw new IllegalArgumentException("Illegal (begative) number of milliseconds argument to wait for deamon to stop");
 		}
 
-		LOG.info("Stopping");
-		daemon.interrupt();
-		dxs.stop();
+		LOG.debug("Stopping R4H Datanode plugin");
+		Daemon dm = new Daemon(new Runnable() {
+
+			@Override
+			public void run() {
+				dxs.stop();
+			}
+		});
+		dm.start();
+
 		try {
 			if (waitForDaemon == -1) {
 				daemon.join();
@@ -107,9 +114,14 @@ public class R4HDatanodePlugin implements ServicePlugin {
 				daemon.join(waitForDaemon);
 			}
 		} catch (InterruptedException e) {
-			LOG.error("daemon join interrupted. Exception: " + e.toString());
+			LOG.debug("daemon join interrupted. Exception: " + e.toString());
 		}
-		LOG.info("Stopped");
+
+		if (dm.isAlive()) {
+			LOG.error("timeout waiting for R4H plugin to stop");
+		} else {
+			LOG.info("R4H Datanode plugin stopped");
+		}
 	}
 
 	/**

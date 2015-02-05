@@ -30,7 +30,6 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hdfs.server.datanode.DataNode;
 import org.apache.hadoop.hdfs.server.datanode.DataNodeBridge;
 import org.apache.hadoop.util.StringUtils;
-
 import org.accelio.jxio.EventName;
 import org.accelio.jxio.EventQueueHandler;
 import org.accelio.jxio.EventReason;
@@ -186,11 +185,31 @@ class DataXceiverServer implements Runnable {
 	}
 
 	public void stop() {
-		// TODO: PROPER CLOSE OF ALL WORKERS!
+		LOG.info("Stopping R4H resources");
 
-		LOG.debug("Closing main listener event queue handler");
-		eqh.close();
-		LOG.debug("After main listener event queue handler close");
+		LOG.debug("Closing listener event queue handler");
+		eqh.stop();
+
+		LOG.debug("Closing active workers");
+		// clone hastable since close callbacks removes sessions from this hastable
+		// main eqh was closed before so no new sessions will be added
+		Hashtable<ServerSession, DataXceiver> sesToDxcHashtableClone = (Hashtable<ServerSession, DataXceiver>) sessionToWorkerHashtable.clone();
+		while (sesToDxcHashtableClone.keys().hasMoreElements()) {
+			ServerSession activeSession = sessionToWorkerHashtable.keys().nextElement();
+			DataXceiver dxc = sesToDxcHashtableClone.remove(activeSession);
+			ServerPortalWorker spw = dxc.getServerPortalWorker();
+			spw.eqh.stop();
+			spPool.remove(spw);
+		}
+		sessionToWorkerHashtable.clear();
+
+		LOG.debug("Closing free workers");
+		for (ServerPortalWorker spw : spPool) {
+			spw.eqh.stop();
+		}
+		spPool.clear();
+
+		LOG.info("Stopped R4H resources");
 	}
 
 	@Override
@@ -226,7 +245,7 @@ class DataXceiverServer implements Runnable {
 			// This way JXIO does not supply it as a hinted before it's back in the pool
 			spPool.add(spw);
 			spw.setFree(true);
-			
+
 			if (LOG.isDebugEnabled()) {
 				LOG.debug("returned SPW to pool. poolSize=" + spPool.size());
 			}
