@@ -29,7 +29,6 @@ import java.util.concurrent.Executors;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.util.StringUtils;
-
 import org.accelio.jxio.EventQueueHandler;
 import org.accelio.jxio.Msg;
 import org.accelio.jxio.MsgPool;
@@ -83,7 +82,7 @@ public class ServerPortalWorker implements Worker {
 		public void run() {
 			if (!session.getIsClosing()) {
 				R4HProtocol.wrappedSendResponse(session, msg, LOG);
-				if (onFlightMsgs != null) { // Compatibility for CDH44 - no aligned with JXIO discard api yet
+				if (onFlightMsgs != null) { // TODO: list is not safe!!!
 					onFlightMsgs.remove(msg);
 				}
 			}

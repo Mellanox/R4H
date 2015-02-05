@@ -58,7 +58,6 @@ import org.accelio.jxio.EventReason;
 import org.accelio.jxio.Msg;
 import org.accelio.jxio.ServerSession;
 import org.accelio.jxio.ServerSession.SessionKey;
-
 import org.apache.hadoop.hdfs.server.datanode.BlockReceiverBridge;
 import org.apache.hadoop.hdfs.server.datanode.CachingStrategy;
 import org.apache.hadoop.hdfs.server.datanode.DataNodeBridge;
@@ -458,7 +457,7 @@ abstract class DataXceiverBase {
 			}
 			final boolean isLastPkt = pkt.isLastPacketInBlock();
 			final long seqNo = pkt.getSeqno();
-			final long offsetInBlock = pkt.getOffsetInBlock();
+			final long offsetInBlock = pkt.getOffsetInBlock() + pkt.getDataLen();
 
 			if (LOG.isDebugEnabled()) {
 				LOG.debug("After processing packet: " + pkt + "\nuri=" + DataXceiverBase.this.uri);
@@ -508,10 +507,7 @@ abstract class DataXceiverBase {
 					}
 				});
 			} else {
-				// synchronized (pipelineContext) {
-				pipelineContext.setPktDetails(seqNo, isLastPkt);
-				// pipelineContext.notifyAll();
-				// }
+				pipelineContext.setPktDetails(seqNo, isLastPkt, offsetInBlock);
 				packetAsyncIOExecutor.execute(new Runnable() {
 
 					@Override
@@ -622,6 +618,12 @@ abstract class DataXceiverBase {
 	}
 
 	private void replyPipelineAck(Msg origMsg, long expectedSeqno, PipelineAck ack, Status s, boolean async) throws IOException {
+		PipelinePacketContext pipelinePktContext = (PipelinePacketContext) origMsg.getMirror(false).getUserContext();
+		long offsetInBlock = pipelinePktContext.getOffsetInBlock();
+		if (ack.isSuccess() && offsetInBlock > blockReceiver.getReplicaInfo().getBytesAcked()) {
+			blockReceiver.getReplicaInfo().setBytesAcked(offsetInBlock);
+		}
+
 		replyPacketAck(origMsg, preparePipelineAck(expectedSeqno, ack, s), async);
 	}
 
@@ -703,6 +705,7 @@ abstract class DataXceiverBase {
 		OutputStream replyOut = new ByteBufferOutputStream(msg.getOut());
 		replyAck.write(replyOut);
 		replyOut.flush();
+
 		if (async) {
 			if (LOG.isDebugEnabled()) {
 				LOG.debug("queue ack reply for async response : " + replyAck + "\nuri=" + uri);

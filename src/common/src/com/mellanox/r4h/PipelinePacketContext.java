@@ -27,6 +27,7 @@ class PipelinePacketContext {
 	private boolean isLastPacket;
 	private boolean isAsyncIoFinished = false;
 	private PipelineAck ackReadyToSend = null;
+	private long offsetInBlock;
 
 	static final int INIT_SEQNO = -1;
 
@@ -52,9 +53,10 @@ class PipelinePacketContext {
 		this.isLastPacket = false;
 	}
 
-	void setPktDetails(long seqno, boolean isLastPacketInBlock) {
+	void setPktDetails(long seqno, boolean isLastPacketInBlock, long offsetInBlock) {
 		this.seqno = seqno;
 		this.isLastPacket = isLastPacketInBlock;
+		this.offsetInBlock = offsetInBlock;
 	}
 
 	void markAsyncIOasFinished() {
@@ -68,9 +70,13 @@ class PipelinePacketContext {
 	PipelineAck getAckReadyToSend() {
 		return ackReadyToSend;
 	}
-	
+
 	boolean isAckReadyToSend() {
 		return ackReadyToSend != null;
+	}
+
+	long getOffsetInBlock() {
+		return offsetInBlock;
 	}
 
 }

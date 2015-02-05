@@ -32,6 +32,14 @@ public class DFSClientConfBridge extends Conf {
 		return headerAckTimeoutUsec;
 	}
 
+	public boolean getShortCircuitMmapEnabled() {
+		return shortCircuitMmapEnabled;
+	}
+
+	public boolean getConnectToDnViaHostname() {
+		return connectToDnViaHostname;
+	}
+
 	/**
 	 * @return the hdfsTimeout
 	 */

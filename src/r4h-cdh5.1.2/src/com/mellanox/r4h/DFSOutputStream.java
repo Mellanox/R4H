@@ -544,12 +544,12 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 							        + one.seqno + " but received " + seqno);
 						}
 
-						assert ack.getSeqno() == lastAckedSeqno + 1;
-						lastAckedSeqno = ack.getSeqno();
 
 						// update bytesAcked
 						streamer.block.setNumBytes(one.getLastByteOffsetBlock());
 
+						lastAckedSeqno = ack.getSeqno();
+						
 						// Return used message to pool
 						synchronized (DFSOutputStream.this.msgPool) {
 							message.returnToParentPool();
@@ -558,7 +558,7 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 						ackQueue.poll();
 
 						// Check if this is ack for last message in block:
-						if (sentPcktHeader.isLastPacketInBlock() && (seqno == sentSeqenceNum)) {
+						if (sentPcktHeader.isLastPacketInBlock()) {
 							// Got ack for last packet in block.
 							this.wasLastPacketAcked = true;
 							// Reset for next block
