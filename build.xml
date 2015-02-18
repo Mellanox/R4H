@@ -10,19 +10,6 @@
     <property name="debuglevel" value="source,lines,vars"/>
     <property name="target" value="1.7"/>
     <property name="source" value="1.7"/>
-    <target name="cdh44">
-	<property name="hadoopdir" value="/.autodirect/acclgwork/ufa/HDFS/r4h-dist-jars/cdh4.4" />
-	<property name="matching-src" value="r4h-cdh4.4" />
-	<property name="jar-title" value="R4H-CDH44" />
-	<antcall target="build" />
-    </target>
-    <target  name="cdh502">
-	<property name="hadoopdir" value="/.autodirect/acclgwork/ufa/HDFS/r4h-dist-jars/cdh5.0.2" />
-	<property name="matching-src" value="r4h-cdh5.0.2" />
-	<property name="matching-common" value="common-hadoop_2.3_2.4" />
-	<property name="jar-title" value="R4H-CDH5.0.2" />
-	<antcall target="build" />
-    </target>
     <target  name="cdh512">
 	<property name="hadoopdir" value="/.autodirect/acclgwork/ufa/HDFS/r4h-dist-jars/cdh5.1.2" />
 	<property name="matching-src" value="r4h-cdh5.1.2" />
@@ -50,14 +37,12 @@
 		<fileset dir="src/${matching-src}/src">
 				<exclude name="**/*.java"/>
 		</fileset>
+		<fileset dir="src/${matching-src}/test">
+				<exclude name="**/*.java"/>
+		</fileset>
 		<fileset dir="src/common/src">
 				<exclude name="**/*.java"/>
 		</fileset>
-        </copy>
-        <copy includeemptydirs="false" todir="build">
-            <fileset dir="test">
-                <exclude name="**/*.java"/>
-            </fileset>
         </copy>
     </target>
     <target name="clean">
@@ -89,6 +74,7 @@
 	<echo message="${ant.project.name}: ${ant.file}"/>
 	<javac debug="true" debuglevel="${debuglevel}" destdir="build" includeantruntime="false" source="${source}" target="${target}">
         <src path="src/${matching-src}/src"/>
+        <src path="src/${matching-src}/test"/>
         <src path="src/${matching-common}/src"/>
         <src path="src/common/src"/>
         <src path="test"/>
