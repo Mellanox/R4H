@@ -50,6 +50,9 @@
 		<fileset dir="src/common/src">
 				<exclude name="**/*.java"/>
 		</fileset>
+		<fileset dir="src/${matching-common}/src">
+				<exclude name="**/*.java"/>
+		</fileset>
         </copy>
     </target>
     <target name="clean">
