@@ -1993,8 +1993,7 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 	}
 
 	protected DFSOutputStream(DFSClient dfsClient, String src, Progressable progress, HdfsFileStatus stat, DataChecksum checksum) throws IOException {
-		// super(checksum, checksum.getBytesPerChecksum(), checksum.getChecksumSize());
-		super(getChecksum4Compute(checksum, stat));
+		super(checksum);
 		this.dfsClient = dfsClient;
 		this.src = src;
 		this.fileId = stat.getFileId();
