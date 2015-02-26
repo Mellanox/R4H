@@ -321,9 +321,9 @@ abstract class DataXceiverBase {
 		}
 		Op op = Op.read(in);
 		if (op != Op.WRITE_BLOCK) {
-			throw new IOException("Unknown op " + op + " in data stream");			
-		} 
-		
+			throw new IOException("Unknown op " + op + " in data stream");
+		}
+
 		parseOpWriteBlock(in);
 
 		// updateCurrentThreadName("Receiving block " + blk); TODO:Need to copy method - is that really necessary ?
@@ -334,12 +334,12 @@ abstract class DataXceiverBase {
 		}
 
 		if (LOG.isDebugEnabled()) {
-			LOG.debug("uri= " + DataXceiverBase.this.uri + "\nopWriteBlock: stage=" + oprHeader.getStage() + ", clientname=" + oprHeader.getClientName()
-			        + "\n  block  =" + oprHeader.getBlock() + ", newGs=" + oprHeader.getLatestGenerationStamp() + ", bytesRcvd=["
-			        + oprHeader.getMinBytesRcvd() + ", " + oprHeader.getMaxBytesRcvd() + "]" + "\n  targets=" + Arrays.asList(oprHeader.getTargets())
-			        + "; pipelineSize=" + oprHeader.getPipelineSize() + ", srcDataNode=" + oprHeader.getSrcDataNode() + ", isDatanode="
-			        + oprHeader.isDatanode() + ", isClient=" + oprHeader.isClient() + ", isTransfer=" + oprHeader.isTransfer()
-			        + ", writeBlock receive buf size " + currMsg.getIn().limit());
+			LOG.debug("uri= " + DataXceiverBase.this.uri + "\nopWriteBlock: stage=" + oprHeader.getStage() + ", clientname="
+			        + oprHeader.getClientName() + "\n  block  =" + oprHeader.getBlock() + ", newGs=" + oprHeader.getLatestGenerationStamp()
+			        + ", bytesRcvd=[" + oprHeader.getMinBytesRcvd() + ", " + oprHeader.getMaxBytesRcvd() + "]" + "\n  targets="
+			        + Arrays.asList(oprHeader.getTargets()) + "; pipelineSize=" + oprHeader.getPipelineSize() + ", srcDataNode="
+			        + oprHeader.getSrcDataNode() + ", isDatanode=" + oprHeader.isDatanode() + ", isClient=" + oprHeader.isClient() + ", isTransfer="
+			        + oprHeader.isTransfer() + ", writeBlock receive buf size " + currMsg.getIn().limit());
 		}
 
 		// We later mutate block's generation stamp and length, but we need to
@@ -523,10 +523,10 @@ abstract class DataXceiverBase {
 			}
 
 		} catch (Exception e) {
-		  close();
+			LOG.error("Got error during packet procesing", e);
+			close();
 		}
 	}
-
 
 	private void processPacketReply(Msg msg) throws IOException {
 		PipelinePacketContext pipelinePktContext = (PipelinePacketContext) msg.getUserContext(); // TODO: dynamic cast and
@@ -826,6 +826,6 @@ abstract class DataXceiverBase {
 	}
 
 	abstract void parseOpWriteBlock(DataInputStream in) throws IOException;
-	
+
 	abstract void senderWriteBlock(DataOutputStream out, ExtendedBlock origBlk) throws IOException;
 }
