@@ -523,38 +523,10 @@ abstract class DataXceiverBase {
 			}
 
 		} catch (Exception e) {
-			handlePacketProcessingException(msg, e);
+		  close();
 		}
 	}
 
-	private void handlePacketProcessingException(Msg msg, Exception e) {
-		LOG.error("Exception during processing" + blockReceiver.getBlock() + StringUtils.stringifyException(e));
-		PacketHeader pkt = null;
-		try {
-			pkt = blockReceiver.getPacketReceiver().getHeader();
-		} catch (IllegalArgumentException | IllegalAccessException e2) {
-		}
-		if (pkt != null) {
-			try {
-				// construct my ack message
-				Status[] replies = new Status[2];
-				replies[0] = SUCCESS;
-				replies[1] = ERROR;
-				PipelineAck replyAck = new PipelineAck(pkt.getSeqno(), replies);
-				replyPacketAck(msg, replyAck, false);
-			} catch (IOException e1) {
-				LOG.error("Failed to replyNack: " + StringUtils.stringifyException(e1));
-			}
-
-		} else {
-			LOG.warn("Cannot reply response while handling packet processing exception because pkt header is NULL");
-		}
-
-		if ((DataXceiverBase.this.clientSession != null) && (!DataXceiverBase.this.clientSession.getIsClosing())) {
-			clientSessionCloseEventExpected = true;
-			DataXceiverBase.this.clientSession.close();
-		}
-	}
 
 	private void processPacketReply(Msg msg) throws IOException {
 		PipelinePacketContext pipelinePktContext = (PipelinePacketContext) msg.getUserContext(); // TODO: dynamic cast and
