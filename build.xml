@@ -84,7 +84,6 @@
         <src path="src/${matching-src}/test"/>
         <src path="src/${matching-common}/src"/>
         <src path="src/common/src"/>
-        <src path="test"/>
         <classpath refid="R4H.classpath"/>
     </javac>
 
