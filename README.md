@@ -16,15 +16,4 @@ When the client application uses the R4H plugin jar, the connection is initiated
 
 R4H provides significant CPU utilization by using Mellanox ConnectX® interconnect for Ethernet and InfiniBand fabrics to transfer the data over RDMA (Remote Direct Memory Access) technology with kernel bypass and zero-copy.  
  
-### HDFS Write Data Flow 
-Application writes data bytes to a DFS output stream of a pre-created file using an HDFS client. The DFS output stream splits the data to packets and streams it to a replication pipeline of datanodes picked by the namenode per new block. The first DN on pipeline of the current block receives the packets from the client, forwards it to the next DN and stores the data locally.
-
- | Client Write Flow | RDMA | TCP
---- | --- | --- | --- 
-1.|	Application creates a file using DistributedFileSystem and provided with a DFSOutputStream for this file | | 
-2.|	Application writes data bytes on the DFSOutputStream which calculates checksum, copies and stores the data to internal packet buffer | writes to preregistered direct buffer | writes to byte array
-3.|	Each packet is queued to the DataStreamer which creates a connection to the first datanode on the pipeline for the current block that was picked by the namenode and sends the packets | qeues an asynchroniuse work elelment to the HW to transfer the direct buffer with zero-copy and kernel bypass | sends the pakcet's byte array on a socket stream with a buffer copy through the kernel TCP stack
-4.| DataStreamers receives acks for sent packets, verifies reply message and enforce sequence order | Single context on DataStreamer for sending packets and receiving acks | seperated ResponseProccessor thread for receiving the acks
-4.| Once a block size is exceeded, the DataStreamer sends request to the namenode for new block and creates a connection to the first node on the new pipeline.
-
-
+#### More design details [here] (https://github.com/Mellanox/r4h/wiki)
