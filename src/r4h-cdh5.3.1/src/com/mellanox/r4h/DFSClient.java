@@ -1323,7 +1323,7 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory, DataEncr
 				LOG.trace("Created msg pool: " + msgPool);
 			}
 
-			R4HEventHandler eqh = new R4HEventHandler(null, false);
+			R4HEventHandler eqh = new R4HEventHandler(null);
 
 			res = new JXIOClientResource(eqh, msgPool);
 		} else if (LOG.isDebugEnabled()) {

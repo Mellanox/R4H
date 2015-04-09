@@ -22,29 +22,31 @@ import java.io.FileDescriptor;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Future;
 
-import org.apache.hadoop.util.StringUtils;
+import org.accelio.jxio.Msg;
 
 public class AsyncFileOutputStream extends FileOutputStream {
-	private final ExecutorService threadPool;
+	private final R4HExecutor ioExecutor;
 	private final AsyncWriteCompletion writeCompleteCallBack;
 	private Object userContext = null;
 	private long limiterThreadID = 0;
+	private final MessageAction msgCallbacks;
+	private Msg currMsg = null;
 
-	public AsyncFileOutputStream(File file, ExecutorService threadPool, AsyncWriteCompletion writeCompleteCallBack) throws FileNotFoundException {
+	public AsyncFileOutputStream(File file, R4HExecutor ioExecutor, MessageAction msgCallbacks, AsyncWriteCompletion writeCompleteCallBack)
+	        throws FileNotFoundException {
 		super(file);
-		this.threadPool = threadPool;
+		this.ioExecutor = ioExecutor;
 		this.writeCompleteCallBack = writeCompleteCallBack;
+		this.msgCallbacks = msgCallbacks;
 	}
 
-	public AsyncFileOutputStream(FileDescriptor fd, ExecutorService threadPool, AsyncWriteCompletion writeCompleteCallBack)
+	public AsyncFileOutputStream(FileDescriptor fd, R4HExecutor ioExecutor, MessageAction msgCallbacks, AsyncWriteCompletion writeCompleteCallBack)
 	        throws FileNotFoundException {
 		super(fd);
-		this.threadPool = threadPool;
+		this.ioExecutor = ioExecutor;
 		this.writeCompleteCallBack = writeCompleteCallBack;
+		this.msgCallbacks = msgCallbacks;
 	}
 
 	public void setUserContext(Object userContext) {
@@ -53,6 +55,10 @@ public class AsyncFileOutputStream extends FileOutputStream {
 
 	public void limitAsyncIObyThreadID(long limiterThreadId) {
 		this.limiterThreadID = limiterThreadId;
+	}
+
+	public void setCurrMsg(Msg msg) {
+		this.currMsg = msg;
 	}
 
 	public class AsyncWrite implements Runnable {
@@ -91,13 +97,7 @@ public class AsyncFileOutputStream extends FileOutputStream {
 	@Override
 	public void write(byte[] b, int off, int len) throws IOException {
 		if ((limiterThreadID == 0) || (limiterThreadID == Thread.currentThread().getId())) {
-			threadPool.execute(new AsyncWrite(this.userContext, b, off, len));
-//			try {
-//	            threadPool.submit(new AsyncWrite(this.userContext, b, off, len)).get();
-//            } catch (InterruptedException | ExecutionException e) {
-//	            DataXceiverServer.LOG.error(StringUtils.stringifyException(e));
-//            }
-			
+			ioExecutor.execute(currMsg, msgCallbacks, new AsyncWrite(this.userContext, b, off, len));
 		} else {
 			super.write(b, off, len);
 		}
@@ -106,12 +106,7 @@ public class AsyncFileOutputStream extends FileOutputStream {
 	@Override
 	public void write(byte[] b) throws IOException {
 		if ((limiterThreadID == 0) || (limiterThreadID == Thread.currentThread().getId())) {
-			threadPool.execute(new AsyncWrite(this, b, 0, b.length));
-//			try {
-//	            threadPool.submit(new AsyncWrite(this, b, 0, b.length)).get();
-//            } catch (InterruptedException | ExecutionException e) {
-//	            DataXceiverServer.LOG.error(StringUtils.stringifyException(e));
-//            }
+			ioExecutor.execute(currMsg, msgCallbacks, new AsyncWrite(this, b, 0, b.length));
 		} else {
 			super.write(b, 0, b.length);
 		}

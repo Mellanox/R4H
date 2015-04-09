@@ -17,9 +17,9 @@ import org.apache.hadoop.hdfs.protocolPB.PBHelper;
 import org.apache.hadoop.hdfs.server.datanode.CachingStrategy;
 
 public class DataXceiver extends DataXceiverBase {
-
-	DataXceiver(DataXceiverServer dxcs, ServerPortalWorker spw, SessionKey sKey) {
-		super(dxcs, spw, sKey);
+	
+	DataXceiver(DataXceiverServer dxcs, ServerPortalWorker spw, SessionKey sKey, R4HExecutor ioExec, R4HExecutor auxExec) {
+		super(dxcs, spw, sKey, ioExec, auxExec);
 	}
 
 	@Override

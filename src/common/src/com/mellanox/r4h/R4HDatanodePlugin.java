@@ -62,7 +62,8 @@ public class R4HDatanodePlugin implements ServicePlugin {
 		dnExposer = new DataNodeBridge(dn);
 
 		try {
-			dxs = new DataXceiverServer(dn);
+			DataNodeBridge dnBridge = new DataNodeBridge(dn);
+			dxs = new DataXceiverServer(dnBridge);
 		} catch (URISyntaxException e) {
 			throw new IllegalArgumentException("Failed to create URI for DataXceriverServer", e);
 		}

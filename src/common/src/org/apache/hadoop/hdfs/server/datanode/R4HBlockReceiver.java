@@ -1,42 +1,34 @@
 package org.apache.hadoop.hdfs.server.datanode;
 
-import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_CLIENT_WRITE_PACKET_SIZE_DEFAULT;
-import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_CLIENT_WRITE_PACKET_SIZE_KEY;
 import static org.apache.hadoop.hdfs.server.datanode.DataNode.DN_CLIENTTRACE_FORMAT;
 
-import java.io.BufferedOutputStream;
+import java.io.BufferedInputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.FileDescriptor;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.OutputStream;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.nio.ByteBuffer;
-import java.util.LinkedList;
-import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.concurrent.ExecutorService;
+import org.apache.hadoop.record.Utils;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.apache.hadoop.hdfs.HdfsConfiguration;
 import org.apache.hadoop.hdfs.protocol.ExtendedBlock;
-import org.apache.hadoop.hdfs.protocol.HdfsConstants;
 import org.apache.hadoop.hdfs.protocol.datatransfer.PacketHeader;
 import org.apache.hadoop.hdfs.protocol.datatransfer.PacketReceiver;
 import org.apache.hadoop.hdfs.server.datanode.fsdataset.ReplicaOutputStreams;
-import org.apache.hadoop.hdfs.server.protocol.DatanodeRegistration;
-import org.apache.hadoop.util.DataChecksum;
 import org.apache.hadoop.util.StringUtils;
+import org.accelio.jxio.Msg;
 
-import sun.awt.ScrollPaneWheelScroller;
-
-import org.accelio.jxio.ServerPortal;
 import com.mellanox.r4h.AsyncFileOutputStream;
-import com.mellanox.r4h.R4HProtocol;
-import com.mellanox.r4h.ServerPortalWorker;
+import com.mellanox.r4h.BRBInetrface;
+import com.mellanox.r4h.ByteBufferInputStream;
+import com.mellanox.r4h.IOBufferSupplier;
+import com.mellanox.r4h.MessageAction;
+import com.mellanox.r4h.R4HExecutor;
 import com.mellanox.r4h.WriteOprHeader;
 import com.mellanox.r4h.AsyncFileOutputStream.AsyncWriteCompletion;
 
@@ -46,31 +38,29 @@ import com.mellanox.r4h.AsyncFileOutputStream.AsyncWriteCompletion;
  * @see org.apache.hadoop.hdfs.server.datanode.DataNode It exposes the neccessary package access fields of DataNode to
  *      R4H
  */
-public class BlockReceiverBridge extends BlockReceiverBridgeBase {
-	private final static int NUM_OF_PREALLOC_PACKET_COPY_BUFFERS = R4HProtocol.MSG_POOLS_GROWTH_FACTOR * R4HProtocol.SERVER_MSG_POOL_SIZE;
-	private final static Log LOG = LogFactory.getLog(BlockReceiverBridge.class);
-	private Field inputStreamField;
-	private Method receivePacketMethod;
-	private Field mirrorOutField;
-	private WriteOprHeader oprHeader;
-	private ReplicaInPipelineInterface replicaInfo;
-	// private PacketReceiver packetReceiver;
-	private String ssInfo;
-	private final long startTime;
+public class R4HBlockReceiver extends R4HBlockReceiverBase implements BRBInetrface {
+	private final static Log LOG = LogFactory.getLog(R4HBlockReceiver.class);
+	private final Field inputStreamField;
+	private final Field mirrorOutField;
 	private final Field packetReceiverField;
-	private final ExecutorService singleThreadExecutor;
+	private final Field currPacketBufField;
+	private final Method receivePacketMethod;
+	private final WriteOprHeader oprHeader;
+	private final ReplicaInPipelineInterface replicaInfo;
+	private final IOBufferSupplier bufSupplier;
+	private final String ssInfo;
+	private final long startTime;
 	private ByteBuffer curCopyBuff;
 	private AsyncFileOutputStream asyncOut;
-	private Field currPacketBufField;
-	private ServerPortalWorker serverPortalWorker;
+	private final MessageAction msgCallbacks;
+	private final R4HExecutor ioExecutor;
+	private Msg currMsg = null;
 
-	public BlockReceiverBridge(ServerPortalWorker spw, WriteOprHeader oprHeader, DataInputStream inForHeaderOnly, String sessionInfo,
-	        DataNodeBridge dnEx, ExecutorService diskIOexecutorService) throws IOException, SecurityException, NoSuchFieldException,
-	        IllegalArgumentException, IllegalAccessException, NoSuchMethodException {
-		super(spw, oprHeader, inForHeaderOnly, sessionInfo, dnEx, diskIOexecutorService);
-		
-		serverPortalWorker = spw;
-		singleThreadExecutor = diskIOexecutorService;
+	public R4HBlockReceiver(IOBufferSupplier bufSupplier, WriteOprHeader oprHeader, DataInputStream inForHeaderOnly, String sessionInfo,
+	        DataNodeBridge dnEx, R4HExecutor ioExecutor, MessageAction msgCallbacks) throws IOException, NoSuchFieldException, SecurityException,
+	        NoSuchMethodException, IllegalArgumentException, IllegalAccessException {
+		super(oprHeader, inForHeaderOnly, sessionInfo, dnEx);
+		this.bufSupplier = bufSupplier;
 		// TODO: check if it is really a newSingleThreadExecutor
 		ssInfo = sessionInfo;
 		inputStreamField = BlockReceiver.class.getDeclaredField("in");
@@ -90,17 +80,25 @@ public class BlockReceiverBridge extends BlockReceiverBridgeBase {
 		currPacketBufField.setAccessible(true);
 
 		this.oprHeader = oprHeader;
+		this.ioExecutor = ioExecutor;
+		this.msgCallbacks = msgCallbacks;
+
+		setAsyncFileOutputStreams();
 
 		startTime = ClientTraceLog.isInfoEnabled() ? System.nanoTime() : 0;
 	}
 
-	public PacketReceiver getPacketReceiver() throws IllegalArgumentException, IllegalAccessException {
+	public PacketHeader getPacketHeader() throws IllegalArgumentException, IllegalAccessException {
+		return getPacketReceiver().getHeader();
+	}
+
+	private PacketReceiver getPacketReceiver() throws IllegalArgumentException, IllegalAccessException {
 		return (PacketReceiver) packetReceiverField.get(this);
 	}
 
 	private void updatePacketCopyBuffer() throws IllegalArgumentException, IllegalAccessException, NoSuchFieldException, SecurityException,
 	        IOException {
-		curCopyBuff = serverPortalWorker.getAsyncIOBuffer();
+		curCopyBuff = bufSupplier.getBuffer();
 		PacketReceiver receiver = getPacketReceiver();
 		currPacketBufField.set(receiver, curCopyBuff);
 	}
@@ -117,14 +115,21 @@ public class BlockReceiverBridge extends BlockReceiverBridgeBase {
 		return replicaInfo;
 	}
 
-	public void processPacket(DataInputStream in) {
+	public void processPacket(Msg msg) throws IOException {
+		msg.getIn().clear();
+		DataInputStream in = new DataInputStream(new ByteBufferInputStream(msg.getIn()));
+		int headerStart = Utils.readVInt(in);
+		msg.getIn().position(headerStart);
+		in = new DataInputStream(new BufferedInputStream(new ByteBufferInputStream(msg.getIn()), 512));
+
+		// update currMsg for executing async tasks.
+		this.currMsg = msg;
+		asyncOut.setCurrMsg(msg);
+
 		try {
 			updatePacketCopyBuffer();
 			inputStreamField.set(this, in);
 			receivePacketMethod.invoke(this);
-			// // TODO: for meantime before running really async
-			// returnCopyBuffer(curCopyBuff);
-			// //
 		} catch (Exception e) {
 			if ((e instanceof IllegalAccessException) || (e instanceof IllegalArgumentException) || (e instanceof InvocationTargetException)) {
 				LOG.fatal("failed during reflection invokation: " + StringUtils.stringifyException(e));
@@ -159,38 +164,30 @@ public class BlockReceiverBridge extends BlockReceiverBridgeBase {
 	}
 
 	@Override
-	void flushOrSync(boolean isSync) throws IOException {
+	void flushOrSync(final boolean isSync) throws IOException {
 		if (LOG.isTraceEnabled()) {
 			LOG.trace("executing async flushOrSync()");
 		}
-		this.singleThreadExecutor.execute(new FlushOrSyncRunner(isSync));
-	}
+		this.ioExecutor.execute(currMsg, msgCallbacks, new Runnable() {
 
-	class FlushOrSyncRunner implements Runnable {
-		final private boolean isSync;
-
-		public FlushOrSyncRunner(boolean isSync) {
-			this.isSync = isSync;
-		}
-
-		@Override
-		public void run() {
-			try {
-				if (LOG.isTraceEnabled()) {
-					LOG.trace("on async call to flushOrSync()");
+			@Override
+			public void run() {
+				try {
+					if (LOG.isTraceEnabled()) {
+						LOG.trace("on async call to flushOrSync()");
+					}
+					R4HBlockReceiver.super.flushOrSync(isSync);
+					if (LOG.isTraceEnabled()) {
+						LOG.trace("after async call to flushOrSync()");
+					}
+				} catch (Throwable w) {
+					LOG.error(StringUtils.stringifyException(w));
 				}
-				BlockReceiverBridge.super.flushOrSync(isSync);
-				if (LOG.isTraceEnabled()) {
-					LOG.trace("after async call to flushOrSync()");
-				}
-			} catch (Throwable w) {
-				LOG.error(StringUtils.stringifyException(w));
 			}
-		}
-
+		});
 	}
 
-	public void setAsyncFileOutputStreams() throws NoSuchFieldException, SecurityException, IllegalArgumentException, IllegalAccessException,
+	private void setAsyncFileOutputStreams() throws NoSuchFieldException, SecurityException, IllegalArgumentException, IllegalAccessException,
 	        IOException {
 		Field streamsField = BlockReceiver.class.getDeclaredField("streams");
 		streamsField.setAccessible(true);
@@ -200,52 +197,12 @@ public class BlockReceiverBridge extends BlockReceiverBridgeBase {
 		Field streamsChecksumOutField = ReplicaOutputStreams.class.getDeclaredField("checksumOut");
 		streamsChecksumOutField.setAccessible(true);
 
-		// // Overriding checksum file output stream to be async - using reflection
-		// // ------------------------------------------------------
-		// Field coutField = BlockReceiver.class.getDeclaredField("cout");
-		// coutField.setAccessible(true);
-		// FileOutputStream cout = (FileOutputStream) coutField.get(this);
-		// checksumOutField = BlockReceiver.class.getDeclaredField("checksumOut");
-		// checksumOutField.setAccessible(true);
-		// // flush orig checksum stream
-		// // OutputStream origChecksumOut = (OutputStream) checksumOutField.get(this);
-		// // origChecksumOut.flush();
-		// // create new checksum stream with orig FD
-		// FileDescriptor checksumFd = cout.getFD();
-		// asyncCout = new AsyncFileOutputStream(checksumFd, singleThreadExecutor, new AsyncWriteCompletion() {
-		//
-		// @Override
-		// public void onWriteComplete(Object context, IOException e) {
-		// if (LOG.isTraceEnabled()) {
-		// LOG.trace("on checksum write completion");
-		// if (context != null) {
-		// if (context instanceof PacketHeader) {
-		// LOG.trace("checksum output stream write completion for " + (PacketHeader) context);
-		// } else if (context instanceof AsyncFileOutputStream.AsyncWrite) {
-		// LOG.trace("checksum output stream write completion for " + (AsyncFileOutputStream.AsyncWrite) context);
-		// }
-		// }
-		//
-		// if (e != null) {
-		// LOG.error("error during writing packet checksum to disk: " + StringUtils.stringifyException(e));
-		// }
-		// }
-		// }
-		// });
-		// asyncCout.limitAsyncIObyThreadID(Thread.currentThread().getId());
-		// OutputStream tmpChecksumOut = new DataOutputStream(new BufferedOutputStream(asyncCout, HdfsConstants.SMALL_BUFFER_SIZE));
-		// checksumOutField.set(this, tmpChecksumOut);
-		// coutField.set(this, asyncCout);
-		// streamsChecksumOutField.set(streams, asyncCout);
-		//
-		// BlockMetadataHeader.writeHeader((DataOutputStream)tmpChecksumOut, streams.getChecksum());
-
 		// Overriding data file output stream to be async - using reflection
 		Field outField = BlockReceiver.class.getDeclaredField("out");
 		outField.setAccessible(true);
 		FileOutputStream out = (FileOutputStream) outField.get(this);
 		FileDescriptor fd = out.getFD();
-		asyncOut = new AsyncFileOutputStream(fd, singleThreadExecutor, new AsyncWriteCompletion() {
+		asyncOut = new AsyncFileOutputStream(fd, ioExecutor, msgCallbacks, new AsyncWriteCompletion() {
 
 			@Override
 			public void onWriteComplete(Object context, IOException e) {
@@ -269,11 +226,18 @@ public class BlockReceiverBridge extends BlockReceiverBridgeBase {
 		asyncOut.limitAsyncIObyThreadID(Thread.currentThread().getId());
 		outField.set(this, asyncOut);
 		streamsDataOutField.set(streams, asyncOut);
-
-		// Field diskChecksumField = BlockReceiver.class.getDeclaredField("diskChecksum");
-		// diskChecksumField.setAccessible(true);
 	}
 
 	// TODO: toString()
+
+	@Override
+	public void closeBlock() {
+		getDataNode().closeBlock(getBlock(), DataNode.EMPTY_DEL_HINT, getReplicaInfo().getStorageUuid());
+	}
+
+	@Override
+	public String getStorageID() throws IOException {
+		return getDataNode().getDNRegistrationForBP(getBlock().getBlockPoolId()).getDatanodeUuid();
+	}
 
 }

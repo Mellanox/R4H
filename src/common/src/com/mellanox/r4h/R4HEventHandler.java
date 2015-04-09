@@ -33,13 +33,11 @@ public class R4HEventHandler extends EventQueueHandler {
 		this.onBreakEqh = onBreakEqhFunc;
 	}
 
-	public R4HEventHandler(Callbacks callbacks, boolean ignoreBreakEventLoop) {
+	public R4HEventHandler(Callbacks callbacks) {
 		super(callbacks);
-		setIgnoreBreak(ignoreBreakEventLoop);
 	}
 
 	private final static Log LOG = LogFactory.getLog(R4HEventHandler.class.getName());
-	private boolean ignoreBreak = false;
 	private boolean stopR4HLoop = false;
 	private boolean wasEvLoopReturnedAfterStop = false;
 
@@ -77,19 +75,9 @@ public class R4HEventHandler extends EventQueueHandler {
 		}
 	}
 
-	public synchronized boolean isBreakIgnored() {
-		return ignoreBreak;
-	}
-
-	public synchronized void setIgnoreBreak(boolean ignoreBreak) {
-		this.ignoreBreak = ignoreBreak;
-	}
-
 	@Override
-	public synchronized void breakEventLoop() {
-		if (!isBreakIgnored()) {
-			super.breakEventLoop();
-		}
+	public void breakEventLoop() {
+		super.breakEventLoop();
 	}
 
 	@Override

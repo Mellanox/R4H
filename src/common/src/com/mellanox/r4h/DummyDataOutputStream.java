@@ -31,7 +31,7 @@ public class DummyDataOutputStream extends DataOutputStream {
 	}
 
 	@Override
-	public synchronized void write(byte[] b, int off, int len) throws IOException {
+	public void write(byte[] b, int off, int len) throws IOException {
 	}
 
 	@Override
@@ -39,7 +39,7 @@ public class DummyDataOutputStream extends DataOutputStream {
 	}
 
 	@Override
-	public synchronized void write(int b) throws IOException {
+	public void write(int b) throws IOException {
 	}
 
 	@Override

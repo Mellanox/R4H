@@ -13,13 +13,14 @@ import org.apache.hadoop.hdfs.protocol.datatransfer.Sender;
 import org.apache.hadoop.hdfs.protocol.proto.DataTransferProtos.OpWriteBlockProto;
 import org.apache.hadoop.hdfs.protocolPB.PBHelper;
 import org.apache.hadoop.hdfs.server.datanode.CachingStrategy;
+
 import static org.apache.hadoop.hdfs.protocol.datatransfer.DataTransferProtoUtil.fromProto;
 
 public class DataXceiver extends DataXceiverBase {
 
-	DataXceiver(DataXceiverServer dxcs, ServerPortalWorker spw, SessionKey sKey) {
-		super(dxcs, spw, sKey);
-	}
+  DataXceiver(DataXceiverServer dxcs, ServerPortalWorker spw, SessionKey sKey, R4HExecutor ioExec, R4HExecutor auxExec) {
+    super(dxcs, spw, sKey, ioExec, auxExec);
+  }
 
 	@Override
 	void parseOpWriteBlock(DataInputStream in) throws IOException {
