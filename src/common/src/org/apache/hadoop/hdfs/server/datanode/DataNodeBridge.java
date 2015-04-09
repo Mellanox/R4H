@@ -29,6 +29,7 @@ public class DataNodeBridge {
 	private static final String NUM_OF_IO_EXECUTORS_PARAM_NAME = "r4h.io.executors";
 	private static final String NUM_OF_PRE_ALLOC_SERVER_PORTAL_WORKERS_PARAM_NAME = "r4h.server.portal.workers";
 
+	public final int numOfAuxExecutors;
 	public final int numOfioExecutors;
 	public final int spwAmount;
 	public final int numOfMsgsToBind;
@@ -81,6 +82,7 @@ public class DataNodeBridge {
 		this.numOfMsgsToBind = NUM_OF_MSG_FOR_BLOCK * blocksToBind;
 		this.msgInSize = getWritePacketSize() + R4HProtocol.JX_BUF_SPARE;
 		this.msgOutSize = R4HProtocol.ACK_SIZE;
+		this.numOfAuxExecutors = blocksToBind;
 	}
 
 	public long getEstimateBlockSize() {

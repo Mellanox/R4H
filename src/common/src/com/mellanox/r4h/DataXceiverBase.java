@@ -69,6 +69,7 @@ import org.apache.hadoop.hdfs.security.token.block.BlockTokenSecretManager;
  */
 abstract class DataXceiverBase {
 	private final static Log LOG = LogFactory.getLog(DataXceiverBase.class);
+	private final DataXceiverServer dxcs;
 	ClientSession clientSession;
 	private final DataNodeBridge dnBridge;
 	protected WriteOprHeader oprHeader;
@@ -83,7 +84,7 @@ abstract class DataXceiverBase {
 	private boolean isFirstRequest = true;
 	private boolean isFirstReply = true;
 	boolean clientSessionCloseEventExpected = true;
-	boolean isSessionEnded = false;
+	boolean returnedAuxillaryExecutorToPool = false;
 	private final R4HExecutor ioExecutor;
 	private final R4HExecutor auxExecutor;
 	private final MessageAction msgCallbacks;
@@ -136,17 +137,20 @@ abstract class DataXceiverBase {
 		@Override
 		public void onSessionEvent(EventName session_event, EventReason reason) {
 			String logmsg = String.format("Server Session event: event=%s reason=%s ss=%s uri=%s", session_event, reason, serverSession, uri);
+			boolean needAuxThreadInit = false;
 			switch (session_event) {
 				case SESSION_CLOSED:
 					if (onFlightMsgs.size() == 0) {
 						LOG.info(logmsg);
 					} else {
 						LOG.error(logmsg);
+						needAuxThreadInit = true;
 					}
 					break;
 				case SESSION_ERROR:
 				case SESSION_REJECT:
 					LOG.error(logmsg);
+					needAuxThreadInit = true;
 					break;
 				default:
 					break;
@@ -171,9 +175,10 @@ abstract class DataXceiverBase {
 					onFlightMsgs.clear();
 					clientOnFlightNumMsgs = 0;
 				}
-				if (!isSessionEnded) {
-					isSessionEnded = true;
+				if (!returnedAuxillaryExecutorToPool) {
+					returnedAuxillaryExecutorToPool = true;
 					spw.decermentSessionsCounter();
+					returnAuxillaryExecutortoPool(needAuxThreadInit);
 				}
 
 			} else if (onFlightMsgs.size() > 0) {
@@ -238,12 +243,14 @@ abstract class DataXceiverBase {
 		public void onSessionEvent(EventName session_event, EventReason reason) {
 			String logmsg = String.format("Client Session event: event=%s reason=%s ss=%s clientOnFlight=%d", session_event, reason, serverSession,
 			        clientOnFlightNumMsgs);
+			boolean needAuxThreadInit = false;
 			switch (session_event) {
 				case SESSION_CLOSED:
 					if ((DataXceiverBase.this.clientSessionCloseEventExpected) && (clientOnFlightNumMsgs == 0)) {
 						LOG.info(logmsg);
 					} else {
 						LOG.error(logmsg);
+						needAuxThreadInit = true;
 					}
 					break;
 				case SESSION_ERROR:
@@ -253,6 +260,7 @@ abstract class DataXceiverBase {
 					if ((serverSession != null) && (!serverSession.getIsClosing())) {
 						serverSession.close();
 					}
+					needAuxThreadInit = true;
 					break;
 				default:
 					break;
@@ -273,9 +281,10 @@ abstract class DataXceiverBase {
 				onFlightMsgs.clear();
 				clientOnFlightNumMsgs = 0;
 
-				if (!isSessionEnded) {
-					isSessionEnded = true;
+				if (!returnedAuxillaryExecutorToPool) {
+					returnedAuxillaryExecutorToPool = true;
 					spw.decermentSessionsCounter();
+					returnAuxillaryExecutortoPool(needAuxThreadInit);
 				}
 			}
 
@@ -284,6 +293,7 @@ abstract class DataXceiverBase {
 	}
 
 	DataXceiverBase(DataXceiverServer dxcs, ServerPortalWorker spw, SessionKey sKey, R4HExecutor ioExec, R4HExecutor auxExecutor) {
+		this.dxcs = dxcs;
 		this.spw = spw;
 		this.dnBridge = dxcs.dnBridge;
 		this.ioExecutor = ioExec;
@@ -814,14 +824,14 @@ abstract class DataXceiverBase {
 		return this.uri;
 	}
 
+	void returnAuxillaryExecutortoPool(boolean needAuxThreadInit) {
+		dxcs.returnAuxillaryExecutortoPool(auxExecutor, needAuxThreadInit);
+	}
+
 	static protected CachingStrategy getCachingStrategy(CachingStrategyProto strategy) {
 		Boolean dropBehind = strategy.hasDropBehind() ? strategy.getDropBehind() : null;
 		Long readahead = strategy.hasReadahead() ? strategy.getReadahead() : null;
 		return new CachingStrategy(dropBehind, readahead);
-	}
-
-	void shutDownAuxillaryExecutor() {
-		this.auxExecutor.shutDown();
 	}
 
 	abstract void parseOpWriteBlock(DataInputStream in) throws IOException;

@@ -20,6 +20,8 @@ package com.mellanox.r4h;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.LinkedList;
+import java.util.List;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ThreadFactory;
 
 import org.apache.commons.logging.Log;
@@ -47,6 +49,7 @@ class DataXceiverServer extends ServerPortalWorker implements Runnable {
 	private final boolean isForwardEnable;
 	private final LinkedList<ServerPortalWorker> spPool;
 	private final LinkedList<R4HExecutor> ioExecutorPool;
+	private final ConcurrentLinkedQueue<R4HExecutor> auxExecutorPool;
 	private final ThreadFactory auxThreadFactory;
 
 	private class DXSCallbacks implements ServerPortal.Callbacks {
@@ -82,7 +85,7 @@ class DataXceiverServer extends ServerPortalWorker implements Runnable {
 			}
 
 			R4HExecutor ioExecutor = getNextIOExecutor();
-			R4HExecutor auxExecutor = new R4HExecutor(auxThreadFactory);
+			R4HExecutor auxExecutor = getNextFreeAuxillaryExecutor();
 			DataXceiverBase dxc = new DataXceiver(DataXceiverServer.this, spw, sesKey, ioExecutor, auxExecutor);
 
 			if (isForwardEnable) {
@@ -96,6 +99,17 @@ class DataXceiverServer extends ServerPortalWorker implements Runnable {
 					LOG.debug("After session accept: spw=" + spw + " , uri=" + dxc.getUri());
 				}
 			}
+		}
+
+		private R4HExecutor getNextFreeAuxillaryExecutor() {
+			R4HExecutor ans;
+			if (!auxExecutorPool.isEmpty()) {
+				ans = auxExecutorPool.poll();
+			} else {
+				LOG.warn("No more auxillary executors available in the pool, allocating a new auxillary executor");
+				ans = new R4HExecutor(auxThreadFactory);
+			}
+			return ans;
 		}
 
 		private R4HExecutor getNextIOExecutor() {
@@ -138,7 +152,6 @@ class DataXceiverServer extends ServerPortalWorker implements Runnable {
 
 		URI workerUri = new URI(String.format("rdma://%s:0", this.uri.getHost()));
 
-		int numOfioExecutors = dnBridge.numOfioExecutors;
 		this.spPool = new LinkedList<ServerPortalWorker>();
 
 		isForwardEnable = dnBridge.isForwardEnable;
@@ -164,10 +177,16 @@ class DataXceiverServer extends ServerPortalWorker implements Runnable {
 		auxThreadFactory = new ThreadFactoryBuilder().setNameFormat("r4h-auxillary-thread-%d").build();
 		ThreadFactory ioThreadFactory = new ThreadFactoryBuilder().setNameFormat("r4h-io-thread-%d").build();
 
-		LOG.info(String.format("Allocating ahead %d IO executors", numOfioExecutors));
+		LOG.info(String.format("Allocating ahead %d IO executors", dnBridge.numOfioExecutors));
 		this.ioExecutorPool = new LinkedList<R4HExecutor>();
-		for (int i = 0; i < numOfioExecutors; i++) {
+		for (int i = 0; i < dnBridge.numOfioExecutors; i++) {
 			ioExecutorPool.add(new R4HExecutor(ioThreadFactory));
+		}
+
+		LOG.info(String.format("Allocating ahead %d Auxillary executors", dnBridge.numOfAuxExecutors));
+		this.auxExecutorPool = new ConcurrentLinkedQueue<R4HExecutor>();
+		for (int i = 0; i < dnBridge.numOfAuxExecutors; i++) {
+			auxExecutorPool.add(new R4HExecutor(auxThreadFactory));
 		}
 
 		LOG.trace(this.toString());
@@ -202,4 +221,19 @@ class DataXceiverServer extends ServerPortalWorker implements Runnable {
 		return String.format("DataXceiverServer{SP='%s', EQH='%s', ThreadPool='%s', URI='%s'}", sp, eqh.toString(), threadGroup.getName(), uri);
 	}
 
+	void returnAuxillaryExecutortoPool(R4HExecutor auxExecutor, boolean needThreadInit) {
+		if (LOG.isDebugEnabled()) {
+			LOG.debug("Returning Auxillary executor to pool :" + auxExecutor);
+		}
+		if (needThreadInit) {
+			LOG.warn("Auxillary thread init requested. Allocating a new executor");
+			List<Runnable> remainingTasks = auxExecutor.shutdownNow();
+			if (!remainingTasks.isEmpty()) {
+				LOG.warn(String.format("Shutting down Auxillary thread with %d remaining unexecuted tasks", remainingTasks.size()));
+			}
+			auxExecutorPool.add(new R4HExecutor(auxThreadFactory));
+		} else {
+			auxExecutorPool.add(auxExecutor);
+		}
+	}
 }

@@ -1,5 +1,6 @@
 package com.mellanox.r4h;
 
+import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadFactory;
@@ -43,7 +44,8 @@ public class R4HExecutor {
 		this.executor.execute(task);
 	}
 
-	public void shutDown() {
-		this.executor.shutdown();
+	public List<Runnable> shutdownNow() {
+		return this.executor.shutdownNow();
 	}
+
 }

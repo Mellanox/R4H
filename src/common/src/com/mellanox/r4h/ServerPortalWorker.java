@@ -94,10 +94,10 @@ public class ServerPortalWorker implements Worker {
 					onFlightMsgs.remove(msg);
 				}
 			}
-			if (!dxc.isSessionEnded && lastPacktInBlock) {
-				dxc.isSessionEnded = true;
+			if (lastPacktInBlock && !dxc.returnedAuxillaryExecutorToPool) {
+				dxc.returnedAuxillaryExecutorToPool = true;
 				decermentSessionsCounter();
-				dxc.shutDownAuxillaryExecutor();
+				dxc.returnAuxillaryExecutortoPool(false);
 			}
 		}
 	}
