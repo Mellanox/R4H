@@ -73,17 +73,13 @@ public class ServerPortalWorker implements Worker {
 
 	private class AsyncReply implements Runnable {
 		final ServerSession session;
-		final DataXceiverBase dxc;
 		final Msg msg;
 		final List<Msg> onFlightMsgs;
-		final boolean lastPacktInBlock;
 
-		AsyncReply(DataXceiverBase dxc, Msg msg, List<Msg> onFlightMsgs, boolean lastPacktInBlock) {
+		AsyncReply(DataXceiverBase dxc, Msg msg, List<Msg> onFlightMsgs) {
 			this.session = dxc.getSessionServer();
-			this.dxc = dxc;
 			this.msg = msg;
 			this.onFlightMsgs = onFlightMsgs;
-			this.lastPacktInBlock = lastPacktInBlock;
 		}
 
 		@Override
@@ -93,11 +89,6 @@ public class ServerPortalWorker implements Worker {
 				if (onFlightMsgs != null) { // TODO: list is not safe!!!
 					onFlightMsgs.remove(msg);
 				}
-			}
-			if (lastPacktInBlock && !dxc.returnedAuxillaryExecutorToPool) {
-				dxc.returnedAuxillaryExecutorToPool = true;
-				decermentSessionsCounter();
-				dxc.returnAuxillaryExecutortoPool(false);
 			}
 		}
 	}
@@ -202,8 +193,8 @@ public class ServerPortalWorker implements Worker {
 		}
 	}
 
-	void queueAsyncReply(DataXceiverBase dxc, Msg msg, List<Msg> onFlightMsgs, boolean breakEventLoop, boolean lastPacketInBlock) {
-		asyncOprQueue.add(new AsyncReply(dxc, msg, onFlightMsgs, lastPacketInBlock));
+	void queueAsyncReply(DataXceiverBase dxc, Msg msg, List<Msg> onFlightMsgs, boolean breakEventLoop) {
+		asyncOprQueue.add(new AsyncReply(dxc, msg, onFlightMsgs));
 		if (msgCounter.incrementAndGet() % 10 == 0 || breakEventLoop || onFlightMsgs.size() < 10) {
 			eqh.breakEventLoop();
 		}

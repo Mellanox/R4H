@@ -304,7 +304,7 @@ abstract class DataXceiverBase {
 		this.msgCallbacks = new MessageAction() {
 
 			@Override
-			public void onPacketComplete(Msg msg) {
+			public void onMessageAction(Msg msg) {
 				PacketMessageContext pmc = PacketMessageContext.getPacketMessageContext(msg);
 				synchronized (pmc) {
 					completePacket(msg);
@@ -515,7 +515,7 @@ abstract class DataXceiverBase {
 			if (!hasPipeline()) {
 
 				if (isLastPkt) {
-					if (lastProcessedRequestMsg != null && pmc != PacketMessageContext.getPacketMessageContext(lastProcessedRequestMsg)) {
+					if ((lastProcessedRequestMsg != null) && (lastProcessedRequestMsg != msg)) { // in case of lastProcessedRequestMsg completed and JXIO allocated it to the current msg.
 						waitOnPreviousRequestIfNotCompleted();
 					}
 
@@ -582,9 +582,11 @@ abstract class DataXceiverBase {
 			// If this is the last packet in block, then close block
 			// file and finalize the block before responding success
 			if (isLastPkt) {
-				if (lastProcessedRequestMsg != null && pmc != PacketMessageContext.getPacketMessageContext(lastProcessedRequestMsg)) {
+				if ((lastProcessedRequestMsg != null) && (lastProcessedRequestMsg != msg)) { // in case of lastProcessedRequestMsg completed and JXIO allocated it to the current msg.
 					waitOnPreviousRequestIfNotCompleted();
 				}
+
+				// done with the previous messages - can finalize the block
 				blockReceiver.finalizeBlock();
 				asyncCloseClientSession();
 			}
@@ -612,7 +614,7 @@ abstract class DataXceiverBase {
 			int refCount = pmc.decrementReferenceCounter();
 
 			if (refCount == 0) {
-				msgCallbacks.onPacketComplete(origMsg);
+				msgCallbacks.onMessageAction(origMsg);
 			}
 		}
 	}
@@ -660,7 +662,7 @@ abstract class DataXceiverBase {
 		BlockOpResponseProto.newBuilder().setStatus(status).setFirstBadLink(firstBadNode).build().writeDelimitedTo(replyOut);
 		replyOut.flush();
 		LOG.info("sending response for src: " + uri);
-		spw.queueAsyncReply(DataXceiverBase.this, msg, onFlightMsgs, true, false);
+		spw.queueAsyncReply(DataXceiverBase.this, msg, onFlightMsgs, true);
 	}
 
 	private void replyPacketAck(Msg msg, PipelineAck replyAck, boolean breakEventLoop, boolean lastPacketInBlock) throws IOException {
@@ -672,7 +674,7 @@ abstract class DataXceiverBase {
 		if (LOG.isDebugEnabled()) {
 			LOG.debug("queue ack reply for async response : " + replyAck + "\nuri=" + uri);
 		}
-		spw.queueAsyncReply(DataXceiverBase.this, msg, onFlightMsgs, breakEventLoop, lastPacketInBlock);
+		spw.queueAsyncReply(DataXceiverBase.this, msg, onFlightMsgs, breakEventLoop);
 	}
 
 	private boolean hasPipeline() {
@@ -681,7 +683,6 @@ abstract class DataXceiverBase {
 
 	private void waitOnPreviousRequestIfNotCompleted() throws InterruptedException {
 		PacketMessageContext lastContext = PacketMessageContext.getPacketMessageContext(lastProcessedRequestMsg);
-		// if the value after the increment is > 1 - it means the io thread did not finish with the packet
 		synchronized (lastContext) {
 			if (!lastContext.getIsCompleted()) {
 				lastContext.markNotifyNeededForLastPacket();
@@ -707,7 +708,10 @@ abstract class DataXceiverBase {
 			}
 		}
 
-		// if getLastPacketMessage != null -> the io Thread should wake the aux thread up and finalize the block
+		if (pmc.isLastPacketInBlock()) {
+			asyncReturnAuxillaryExecutortoPool();
+		}
+
 		if (pmc.isNotifyForLastPacketNeeded()) {
 			pmc.notifyAll();
 		}
@@ -722,7 +726,7 @@ abstract class DataXceiverBase {
 		msg.getOut().clear();
 		BlockOpResponseProto protobuff = BlockOpResponseProto.newBuilder().setStatus(mirrorInStatus).setFirstBadLink(firstBadLink).build();
 		protobuff.writeDelimitedTo(new ByteBufferOutputStream(msg.getOut()));
-		spw.queueAsyncReply(DataXceiverBase.this, msg, onFlightMsgs, true, false);
+		spw.queueAsyncReply(DataXceiverBase.this, msg, onFlightMsgs, true);
 	}
 
 	ServerSession getSessionServer() {
@@ -783,7 +787,7 @@ abstract class DataXceiverBase {
 					}
 					resp.build().writeDelimitedTo(replyOut);
 					replyOut.flush();
-					spw.queueAsyncReply(DataXceiverBase.this, msg, onFlightMsgs, true, false);
+					spw.queueAsyncReply(DataXceiverBase.this, msg, onFlightMsgs, true);
 				}
 				LOG.error("Block token verification failed: op=" + op + ", serverSession=" + serverSession + ", message=" + e.getLocalizedMessage());
 				return false;// FAILED
@@ -824,7 +828,22 @@ abstract class DataXceiverBase {
 		return this.uri;
 	}
 
-	void returnAuxillaryExecutortoPool(boolean needAuxThreadInit) {
+	private void asyncReturnAuxillaryExecutortoPool() {
+		spw.queueAsyncRunnable(new Runnable() {
+
+			@Override
+			public void run() {
+				if (!returnedAuxillaryExecutorToPool) {
+					returnedAuxillaryExecutorToPool = true;
+					spw.decermentSessionsCounter();
+					returnAuxillaryExecutortoPool(false);
+				}
+			}
+
+		});
+	}
+
+	private void returnAuxillaryExecutortoPool(boolean needAuxThreadInit) {
 		dxcs.returnAuxillaryExecutortoPool(auxExecutor, needAuxThreadInit);
 	}
 

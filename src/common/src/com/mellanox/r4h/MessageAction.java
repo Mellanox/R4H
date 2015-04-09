@@ -4,6 +4,6 @@ import org.accelio.jxio.Msg;
 
 public interface MessageAction {
 
-		public void onPacketComplete(Msg msg);
+		public void onMessageAction(Msg msg);
 
 }
