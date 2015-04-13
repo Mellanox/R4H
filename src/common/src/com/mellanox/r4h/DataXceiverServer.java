@@ -30,6 +30,7 @@ import org.apache.hadoop.hdfs.server.datanode.DataNodeBridge;
 import org.accelio.jxio.EventName;
 import org.accelio.jxio.EventReason;
 import org.accelio.jxio.ServerPortal;
+import org.accelio.jxio.WorkerCache;
 import org.accelio.jxio.ServerSession.SessionKey;
 import org.accelio.jxio.WorkerCache.Worker;
 
@@ -75,15 +76,20 @@ class DataXceiverServer extends ServerPortalWorker implements Runnable {
 		 */
 		@Override
 		public void onSessionNew(SessionKey sesKey, String srcIP, Worker workerHint) {
-
 			LOG.info(String.format("New session request from %s (uri=%s)", srcIP, sesKey.getUri()));
 			ServerPortalWorker spw;
 			if (isForwardEnable) {
-				spw = getNextFreePortalWorker();
+				if ((workerHint != null) && (workerHint instanceof ServerPortalWorker)) {
+					spw = (ServerPortalWorker) workerHint;
+				} else {
+					LOG.error("Got invalid server portal worker cache hint. Getting manually next free worker.");
+					spw = getNextFreePortalWorker();
+				}
 			} else {
 				spw = DataXceiverServer.this;
 			}
 
+			spw.incrementSessionsCounter();
 			R4HExecutor ioExecutor = getNextIOExecutor();
 			R4HExecutor auxExecutor = getNextFreeAuxillaryExecutor();
 			DataXceiverBase dxc = new DataXceiver(DataXceiverServer.this, spw, sesKey, ioExecutor, auxExecutor);
@@ -118,21 +124,20 @@ class DataXceiverServer extends ServerPortalWorker implements Runnable {
 			return ans;
 		}
 
-		private ServerPortalWorker getNextFreePortalWorker() {
-			ServerPortalWorker minSessionsSpw = spPool.getFirst();
+	}
 
-			for (ServerPortalWorker spw : spPool) {
-				if (spw.isFree()) {
-					spw.incrementSessionsCounter();
-					return spw;
-				} else if (spw.getSessionsCounterValue() < minSessionsSpw.getSessionsCounterValue()) {
-					minSessionsSpw = spw;
-				}
+	private ServerPortalWorker getNextFreePortalWorker() {
+		ServerPortalWorker minSessionsSpw = spPool.getFirst();
+
+		for (ServerPortalWorker spw : spPool) {
+			if (spw.isFree()) {
+				return spw;
+			} else if (spw.getSessionsCounterValue() < minSessionsSpw.getSessionsCounterValue()) {
+				minSessionsSpw = spw;
 			}
-			// all spw are full - pick the spw with the lowest sessionsCounter.
-			minSessionsSpw.incrementSessionsCounter();
-			return minSessionsSpw;
 		}
+		// if we got here then all spw exceeded the #sessions limit - pick the spw with the lowest #sessions.
+		return minSessionsSpw;
 	}
 
 	DataXceiverServer(DataNodeBridge dnBridge) throws URISyntaxException {
@@ -144,8 +149,12 @@ class DataXceiverServer extends ServerPortalWorker implements Runnable {
 		this.threadGroup = new ThreadGroup("R4H Datanode Threads");
 		LOG.info("Creating DataXceiverServer - uri=" + uri);
 		DataXceiverServer.DXSCallbacks dxsCbs = this.new DXSCallbacks();
-
-		this.sp = new ServerPortal(eqh, uri, dxsCbs);
+		this.sp = new ServerPortal(eqh, uri, dxsCbs, new WorkerCache.WorkerProvider() {
+			@Override
+			public Worker getWorker() {
+				return getNextFreePortalWorker();
+			}
+		});
 
 		LOG.debug("After ServerPortal creation");
 		LOG.trace("writePacketSize=" + dnBridge.getWritePacketSize());

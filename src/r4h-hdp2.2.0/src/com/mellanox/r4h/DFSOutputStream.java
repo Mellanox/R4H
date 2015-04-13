@@ -118,12 +118,14 @@ import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
 import com.google.common.cache.RemovalListener;
 import com.google.common.cache.RemovalNotification;
+
 import org.accelio.jxio.ClientSession;
 import org.accelio.jxio.ClientSession.Callbacks;
 import org.accelio.jxio.EventName;
 import org.accelio.jxio.EventReason;
 import org.accelio.jxio.Msg;
 import org.accelio.jxio.MsgPool;
+
 import com.mellanox.r4h.client.HdfsDataOutputStream.SyncFlag;
 
 /****************************************************************
@@ -998,6 +1000,16 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 						}
 						setupPipelineForAppendOrRecovery();
 						initDataStreaming();
+					}
+
+					if (one.lastPacketInBlock) {
+						// wait for all sent packet acks
+						while (!ackQueue.isEmpty()) {
+							DFSOutputStream.this.eventQHandler.runEventLoop(ackQueue.size(), 10 * 1000 * 1000);
+							if (this.currentCSCallbacks.errorFlowInTheMiddle) {
+								throw new IOException("Error in message/session while running streamer, client cannot continue.");
+							}
+						}
 					}
 
 					long lastByteOffsetInBlock = one.getLastByteOffsetBlock();

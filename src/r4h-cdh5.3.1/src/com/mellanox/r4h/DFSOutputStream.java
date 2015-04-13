@@ -983,6 +983,16 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 						initDataStreaming();
 					}
 
+					if (one.lastPacketInBlock) {
+						// wait for all sent packet acks
+						while (!ackQueue.isEmpty()) {
+							DFSOutputStream.this.eventQHandler.runEventLoop(ackQueue.size(), 10 * 1000 * 1000);
+							if (this.currentCSCallbacks.errorFlowInTheMiddle) {
+								throw new IOException("Error in message/session while running streamer, client cannot continue.");
+							}
+						}
+					}
+
 					long lastByteOffsetInBlock = one.getLastByteOffsetBlock();
 					if (lastByteOffsetInBlock > blockSize) {
 						throw new IOException("BlockSize " + blockSize + " is smaller than data size. " + " Offset of packet in block "

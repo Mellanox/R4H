@@ -88,7 +88,6 @@ abstract class DataXceiverBase {
 	private final R4HExecutor ioExecutor;
 	private final R4HExecutor auxExecutor;
 	private final MessageAction msgCallbacks;
-	private Msg lastProcessedRequestMsg = null;
 
 	class SSCallbacks implements ServerSession.Callbacks {
 
@@ -176,8 +175,6 @@ abstract class DataXceiverBase {
 					clientOnFlightNumMsgs = 0;
 				}
 				if (!returnedAuxillaryExecutorToPool) {
-					returnedAuxillaryExecutorToPool = true;
-					spw.decermentSessionsCounter();
 					returnAuxillaryExecutortoPool(needAuxThreadInit);
 				}
 
@@ -282,8 +279,6 @@ abstract class DataXceiverBase {
 				clientOnFlightNumMsgs = 0;
 
 				if (!returnedAuxillaryExecutorToPool) {
-					returnedAuxillaryExecutorToPool = true;
-					spw.decermentSessionsCounter();
 					returnAuxillaryExecutortoPool(needAuxThreadInit);
 				}
 			}
@@ -305,10 +300,7 @@ abstract class DataXceiverBase {
 
 			@Override
 			public void onMessageAction(Msg msg) {
-				PacketMessageContext pmc = PacketMessageContext.getPacketMessageContext(msg);
-				synchronized (pmc) {
-					completePacket(msg);
-				}
+				completePacket(msg);
 			}
 
 		};
@@ -515,11 +507,6 @@ abstract class DataXceiverBase {
 			if (!hasPipeline()) {
 
 				if (isLastPkt) {
-					if ((lastProcessedRequestMsg != null) && (lastProcessedRequestMsg != msg)) { // in case of lastProcessedRequestMsg completed and JXIO allocated it to the current msg.
-						waitOnPreviousRequestIfNotCompleted();
-					}
-
-					// done with the previous messages - can finalize the block
 					Status status = ERROR;
 					try {
 						blockReceiver.finalizeBlock();
@@ -534,10 +521,6 @@ abstract class DataXceiverBase {
 					PipelineAck replyAck = new PipelineAck(seqNo, new Status[] { SUCCESS });
 					pmc.setMessageAck(replyAck);
 				}
-			}
-
-			if (!isLastPkt) {
-				lastProcessedRequestMsg = msg;
 			}
 
 		} catch (Exception e) {
@@ -582,11 +565,6 @@ abstract class DataXceiverBase {
 			// If this is the last packet in block, then close block
 			// file and finalize the block before responding success
 			if (isLastPkt) {
-				if ((lastProcessedRequestMsg != null) && (lastProcessedRequestMsg != msg)) { // in case of lastProcessedRequestMsg completed and JXIO allocated it to the current msg.
-					waitOnPreviousRequestIfNotCompleted();
-				}
-
-				// done with the previous messages - can finalize the block
 				blockReceiver.finalizeBlock();
 				asyncCloseClientSession();
 			}
@@ -612,7 +590,6 @@ abstract class DataXceiverBase {
 			}
 
 			int refCount = pmc.decrementReferenceCounter();
-
 			if (refCount == 0) {
 				msgCallbacks.onMessageAction(origMsg);
 			}
@@ -681,16 +658,6 @@ abstract class DataXceiverBase {
 		return (oprHeader != null && oprHeader.getNumTargets() > 0);
 	}
 
-	private void waitOnPreviousRequestIfNotCompleted() throws InterruptedException {
-		PacketMessageContext lastContext = PacketMessageContext.getPacketMessageContext(lastProcessedRequestMsg);
-		synchronized (lastContext) {
-			if (!lastContext.getIsCompleted()) {
-				lastContext.markNotifyNeededForLastPacket();
-				lastContext.wait();
-			}
-		}
-	}
-
 	private void completePacket(Msg msg) {
 		PacketMessageContext pmc = PacketMessageContext.getPacketMessageContext(msg);
 		spw.getIOBufferSupplier().returnBuffer(pmc.getIOBuffer());
@@ -712,10 +679,6 @@ abstract class DataXceiverBase {
 			asyncReturnAuxillaryExecutortoPool();
 		}
 
-		if (pmc.isNotifyForLastPacketNeeded()) {
-			pmc.notifyAll();
-		}
-		pmc.setPacketComplete();
 	}
 
 	private void replyHeaderPipelineAck(Msg msg, Status mirrorInStatus, String firstBadLink) throws IOException {
@@ -834,8 +797,6 @@ abstract class DataXceiverBase {
 			@Override
 			public void run() {
 				if (!returnedAuxillaryExecutorToPool) {
-					returnedAuxillaryExecutorToPool = true;
-					spw.decermentSessionsCounter();
 					returnAuxillaryExecutortoPool(false);
 				}
 			}
@@ -844,6 +805,8 @@ abstract class DataXceiverBase {
 	}
 
 	private void returnAuxillaryExecutortoPool(boolean needAuxThreadInit) {
+		returnedAuxillaryExecutorToPool = true;
+		spw.decermentSessionsCounter();
 		dxcs.returnAuxillaryExecutortoPool(auxExecutor, needAuxThreadInit);
 	}
 

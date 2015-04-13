@@ -16,8 +16,6 @@ class PacketMessageContext {
 	private long offsetInBlock;
 	private boolean isLastPkt;
 	private boolean syncBlock;
-	private boolean completeProcessing = false;
-	private boolean notifyLastPacket = false;
 
 	PacketMessageContext() {
 		this.referenceCounter = new AtomicInteger(0);
@@ -70,21 +68,4 @@ class PacketMessageContext {
 	static PacketMessageContext getPacketMessageContext(Msg msg) {
 		return (PacketMessageContext) msg.getUserContext();
 	}
-
-	boolean getIsCompleted() {
-		return this.completeProcessing;
-	}
-
-	void setPacketComplete() {
-		this.completeProcessing = true;
-	}
-
-	boolean isNotifyForLastPacketNeeded() {
-		return this.notifyLastPacket;
-	}
-
-	void markNotifyNeededForLastPacket() {
-		this.notifyLastPacket = true;
-	}
-
 }
