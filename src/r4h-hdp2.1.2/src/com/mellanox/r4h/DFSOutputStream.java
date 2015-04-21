@@ -613,7 +613,7 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 			}
 
 			synchronized (ackQueue) {
-				ackQueue.notify();
+				ackQueue.notifyAll();
 			}
 
 		}
@@ -1008,7 +1008,7 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 					one.msg.setUserContext(header);
 					R4HProtocol.wrappedSendRequest(DFSOutputStream.this.currentClientSession, one.msg, LOG);
 					long now2 = System.nanoTime();
-					sentSeqenceNum++;
+					sentSeqenceNum = one.seqno;
 
 					// sent the packet, handle the queues:
 					if (LOG.isTraceEnabled()) {
@@ -1253,7 +1253,10 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 					Packet endOfBlockPacket = dataQueue.remove(); // remove the end of block packet
 					assert endOfBlockPacket.lastPacketInBlock;
 					assert lastAckedSeqno == endOfBlockPacket.seqno - 1;
-					lastAckedSeqno = endOfBlockPacket.seqno;
+					synchronized (ackQueue) {
+						lastAckedSeqno = endOfBlockPacket.seqno;
+						ackQueue.notifyAll();
+					}
 					synchronized (dataQueue) {
 						dataQueue.notifyAll();
 					}
