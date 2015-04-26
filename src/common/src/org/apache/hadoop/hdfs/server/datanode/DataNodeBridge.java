@@ -25,7 +25,7 @@ public class DataNodeBridge {
 	private static final String NUM_OF_MSG_TO_BIND_IN_BLOCKS_PARAM_NAME = "r4h.msg.blocks.bind";
 	private static final String NUM_OF_DYNAMIC_MSG_ALLOCATION_NAME = "r4h.msg.dynamic.allocation";
 	private static final int NUM_OF_IO_EXECUTORS_DEFAULT = 10;
-	private static final int NUM_OF_PRE_ALLOC_SERVER_PORTAL_WORKERS_DEFAULT = 4;
+	private static final int NUM_OF_PRE_ALLOC_SERVER_PORTAL_WORKERS_DEFAULT = 20;
 	private static final String NUM_OF_IO_EXECUTORS_PARAM_NAME = "r4h.io.executors";
 	private static final String NUM_OF_PRE_ALLOC_SERVER_PORTAL_WORKERS_PARAM_NAME = "r4h.server.portal.workers";
 
