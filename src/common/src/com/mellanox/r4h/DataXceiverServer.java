@@ -149,14 +149,7 @@ class DataXceiverServer extends ServerPortalWorker implements Runnable {
 		this.threadGroup = new ThreadGroup("R4H Datanode Threads");
 		LOG.info("Creating DataXceiverServer - uri=" + uri);
 		DataXceiverServer.DXSCallbacks dxsCbs = this.new DXSCallbacks();
-		this.sp = new ServerPortal(eqh, uri, dxsCbs, new WorkerCache.WorkerProvider() {
-			@Override
-			public Worker getWorker() {
-				return getNextFreePortalWorker();
-			}
-		});
 
-		LOG.debug("After ServerPortal creation");
 		LOG.trace("writePacketSize=" + dnBridge.getWritePacketSize());
 
 		URI workerUri = new URI(String.format("rdma://%s:0", this.uri.getHost()));
@@ -166,6 +159,13 @@ class DataXceiverServer extends ServerPortalWorker implements Runnable {
 		isForwardEnable = dnBridge.isForwardEnable;
 
 		if (isForwardEnable) {
+			this.sp = new ServerPortal(eqh, uri, dxsCbs, new WorkerCache.WorkerProvider() {
+				@Override
+				public Worker getWorker() {
+					return getNextFreePortalWorker();
+				}
+			});
+
 			LOG.info("Using forward model");
 			int spwAmount = dnBridge.spwAmount;
 
@@ -179,6 +179,8 @@ class DataXceiverServer extends ServerPortalWorker implements Runnable {
 				LOG.info("Started new server portal worker thread: " + spw);
 			}
 		} else {
+			this.sp = new ServerPortal(eqh, uri, dxsCbs);
+
 			LOG.info("Using accept model");
 			LOG.info("Started a new worker thread: " + super.toString());
 		}
