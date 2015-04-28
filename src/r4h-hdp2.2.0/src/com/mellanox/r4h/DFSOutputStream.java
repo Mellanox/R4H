@@ -423,7 +423,7 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 		 * 		eqh.runeventloop().
 		 */
 		public void onResponse(Msg message) {
-			boolean wasMessageReturned = false;
+			boolean needToReturnMsgToPool = true;
 			if (DFSOutputStream.LOG.isTraceEnabled()) {
 				DFSOutputStream.LOG.trace("DFSClient got a reply message.");
 			}
@@ -449,6 +449,7 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 					}
 					this.pipelineStatus = resp.getStatus();
 					this.firstBadLink = resp.getFirstBadLink();
+					needToReturnMsgToPool = false; //never return header msg to pool
 
 					if (this.pipelineStatus != SUCCESS) {
 						this.didHeaderFail = true;
@@ -563,11 +564,9 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 
 						lastAckedSeqno = ack.getSeqno();
 						
-						// Return used message to pool
-						synchronized (DFSOutputStream.this.msgPool) {
-							message.returnToParentPool();
-						}
-						wasMessageReturned = true;
+						returnMsgToPool(message);
+						needToReturnMsgToPool = false;
+
 						ackQueue.poll();
 
 						// Check if this is ack for last message in block:
@@ -619,10 +618,8 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 				}
 			} while (false);
 
-			if (!wasMessageReturned) {
-				synchronized (DFSOutputStream.this.msgPool) {
-					message.returnToParentPool();
-				}
+			if (needToReturnMsgToPool) {
+				returnMsgToPool(message);
 			}
 
 			synchronized (ackQueue) {
@@ -705,7 +702,7 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 		 */
 		@Override
 		public void onMsgError(Msg msg, EventReason reason) {
-			msg.returnToParentPool();
+			returnMsgToPool(msg);
 			DFSOutputStream.LOG.error(DFSOutputStream.this.toString()
 			        + String.format("Msg error occurred: reason=%s, countPacketArrived=%d", reason, countPacketArrived));
 			if ((this.clientSession != null) && !this.clientSession.getIsClosing()) {
@@ -780,6 +777,8 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 		private final Span traceSpan;
 		final int ACK_Q_THRESHOLD_HIGH = R4HProtocol.MAX_SEND_PACKETS / 2;
 		final int ACK_Q_THRESHOLD_LOW = ACK_Q_THRESHOLD_HIGH / 2;
+
+		private final Msg headerMsg = getMsg();
 
 		/**
 		 * construction with tracing info
@@ -901,7 +900,7 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 		public void run() {
 			boolean waslpib = false;
 			if (LOG.isTraceEnabled()) {
-				LOG.trace("Started running streamer.");
+				LOG.trace("Started running streamer with msg pool "+DFSOutputStream.this.msgPool);
 			}
 
 			if (toPrintBreakdown) {
@@ -1120,6 +1119,10 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 			closeStream();
 			streamerClosed = true;
 			closed = true;
+			if (LOG.isTraceEnabled()) {
+				LOG.trace("closing streamer");
+			}
+			DFSOutputStream.this.returnMsgToPool(headerMsg);
 			synchronized (dataQueue) {
 				dataQueue.notifyAll();
 			}
@@ -1721,8 +1724,8 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 					//
 					// Xmit header info to datanode
 					//
-					Msg message = getMsg();
-					out = new DataOutputStream(new BufferedOutputStream(new ByteBufferOutputStream(message.getOut()), 512));
+					headerMsg.resetPositions();
+					out = new DataOutputStream(new BufferedOutputStream(new ByteBufferOutputStream(headerMsg.getOut()), 512));
 					if (!runEventLoopAndCheckErrorFlow(eventLoopRunDurationUsec)) {
 						return false;
 					}
@@ -1777,7 +1780,7 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 					}
 
 					long now1 = System.nanoTime();
-					R4HProtocol.wrappedSendRequest(DFSOutputStream.this.currentClientSession, message, LOG);
+					R4HProtocol.wrappedSendRequest(DFSOutputStream.this.currentClientSession, headerMsg, LOG);
 					long now2 = System.nanoTime();
 
 					if (!runEventLoopAndCheckErrorFlow(eventLoopRunDurationUsec)) {
@@ -2716,14 +2719,28 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 		System.arraycopy(srcs, skipIndex + 1, dsts, skipIndex, dsts.length - skipIndex);
 	}
 
-	Msg getMsg() {
+	private Msg getMsg()  {
 		Msg msg = null;
 		synchronized (DFSOutputStream.this.msgPool) {
-			msg = DFSOutputStream.this.msgPool.getMsg();
-		}
-		if (msg == null) {
-			LOG.error(toString() + "MsgPool is empty. failed to get msg");
+			while (msg == null) {
+				msg = DFSOutputStream.this.msgPool.getMsg();
+				if (msg == null) {
+					LOG.warn(Thread.currentThread() + " " + toString() + " MsgPool " + msgPool + " is empty. Going to wait for Msg.");
+					try {
+	                    DFSOutputStream.this.msgPool.wait();
+                    } catch (InterruptedException e) {
+                    	throw new RuntimeException("Interrupted while waiting for free Msg",e);
+                    }
+				}
+			}
 		}
 		return msg;
+	}
+
+	private void returnMsgToPool(Msg message) {
+		synchronized (DFSOutputStream.this.msgPool) {
+			message.returnToParentPool();
+			DFSOutputStream.this.msgPool.notifyAll();
+		}
 	}
 }
