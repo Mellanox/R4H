@@ -8,6 +8,8 @@ import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.hadoop.hdfs.DFSClient.Conf;
 import org.apache.hadoop.util.DataChecksum;
 
+import com.mellanox.r4h.R4HProtocol;
+
 /**
  * DFSClient configuration
  */
@@ -18,10 +20,20 @@ public class DFSClientConfBridge extends Conf {
 	private static final String HEADER_ACK_CLIENT_TIMEOUT_PARAM_NAME = "r4h.client.header.ack.timeout";
 	// The time to wait for header ack before pronouncing failure:
 	private long headerAckTimeoutUsec;
+	// The parameter name of the number of msgs in client's msgpool
+	private static final String CLIENT_MSG_POOL_NUM_MSGS_PARAM_NAME = "r4h.client.msgpool.num.msgs";
+	private static final int CLIENT_MSG_POOL_NUM_MSGS_DEFAULT = R4HProtocol.MAX_DATA_QUEUE_PACKETS + R4HProtocol.CLIENT_MSGPOOL_SPARE;
+	// The time to wait for header ack before pronouncing failure:
+	private int msgPoolNumMsgs;
 
 	public DFSClientConfBridge(Configuration conf) {
 		super(conf);
 		this.headerAckTimeoutUsec = 1000000 * conf.getInt(HEADER_ACK_CLIENT_TIMEOUT_PARAM_NAME, HEADER_ACK_CLIENT_TIMEOUT_SECONDS_DEFAULT);
+		this.msgPoolNumMsgs = conf.getInt(CLIENT_MSG_POOL_NUM_MSGS_PARAM_NAME, CLIENT_MSG_POOL_NUM_MSGS_DEFAULT);
+	}
+
+	public int getClientMsgPoolNumMsgs() {
+		return msgPoolNumMsgs;
 	}
 
 	/**

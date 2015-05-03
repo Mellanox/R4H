@@ -1315,8 +1315,8 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory, DataEncr
 			int poolOutSize = getConf().getWritePacketSize() + R4HProtocol.JX_BUF_SPARE;
 
 			if (LOG.isTraceEnabled()) {
-				LOG.trace("Creating JXIO message pool with " + R4HProtocol.CLIENT_MSG_POOL_NUM_MSGS + " packets, in size "
-				        + R4HProtocol.CLIENT_MSG_POOL_IN_SIZE + ", out size " + poolOutSize);
+				LOG.trace("Creating JXIO message pool with " + getConf().getClientMsgPoolNumMsgs() + " packets, in size "
+				        + getConf().getClientMsgPoolNumMsgs() + ", out size " + poolOutSize);
 			}
 
 			MsgPool msgPool = new MsgPool(R4HProtocol.CLIENT_MSG_POOL_NUM_MSGS, R4HProtocol.CLIENT_MSG_POOL_IN_SIZE, poolOutSize);

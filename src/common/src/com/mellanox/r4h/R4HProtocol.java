@@ -31,7 +31,6 @@ public class R4HProtocol {
 	public static final int MSG_POOLS_GROWTH_FACTOR = 10;
 	private static final int CLIENT_HASH_LENGTH = 8; // In characters
 	public static final int CLIENT_MSGPOOL_SPARE = 8;
-	static final int CLIENT_MSG_POOL_NUM_MSGS = MAX_DATA_QUEUE_PACKETS + CLIENT_MSGPOOL_SPARE;
 	static final int CLIENT_MSG_POOL_IN_SIZE = ACK_SIZE;
 
 
