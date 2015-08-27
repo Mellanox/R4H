@@ -17,7 +17,7 @@ import org.apache.hadoop.hdfs.protocolPB.PBHelper;
 import org.apache.hadoop.hdfs.server.datanode.CachingStrategy;
 
 public class DataXceiver extends DataXceiverBase {
-	
+
 	DataXceiver(DataXceiverServer dxcs, ServerPortalWorker spw, SessionKey sKey, R4HExecutor ioExec, R4HExecutor auxExec) {
 		super(dxcs, spw, sKey, ioExec, auxExec);
 	}
@@ -26,8 +26,8 @@ public class DataXceiver extends DataXceiverBase {
 	void parseOpWriteBlock(DataInputStream in) throws IOException {
 		final OpWriteBlockProto proto = OpWriteBlockProto.parseFrom(vintPrefixed(in));
 		final DatanodeInfo[] targets = PBHelper.convert(proto.getTargetsList());
-		oprHeader = new WriteOprHeader2_5(PBHelper.convert(proto.getHeader().getBaseHeader().getBlock()), PBHelper.convertStorageType(proto.getStorageType()),
-		        PBHelper.convert(proto.getHeader().getBaseHeader().getToken()), proto.getHeader().getClientName(), targets,
+		oprHeader = new WriteOprHeader2_5(PBHelper.convert(proto.getHeader().getBaseHeader().getBlock()), PBHelper.convertStorageType(proto
+		        .getStorageType()), PBHelper.convert(proto.getHeader().getBaseHeader().getToken()), proto.getHeader().getClientName(), targets,
 		        PBHelper.convertStorageTypes(proto.getTargetStorageTypesList(), targets.length), PBHelper.convert(proto.getSource()),
 		        BlockConstructionStage.valueOf(proto.getStage().name()), proto.getPipelineSize(), proto.getMinBytesRcvd(), proto.getMaxBytesRcvd(),
 		        proto.getLatestGenerationStamp(), fromProto(proto.getRequestedChecksum()),
@@ -35,11 +35,11 @@ public class DataXceiver extends DataXceiverBase {
 	}
 
 	@Override
-    void senderWriteBlock(DataOutputStream out, ExtendedBlock origBlk) throws IOException {
-	    new Sender(out).writeBlock(origBlk, ((WriteOprHeader2_5)oprHeader).getStorageType(), oprHeader.getBlockToken(), oprHeader.getClientName(), oprHeader.getTargets(),
-	    		((WriteOprHeader2_5)oprHeader).getAllStorageTypes(), oprHeader.getSrcDataNode(), oprHeader.getStage(), oprHeader.getPipelineSize(),
-		        oprHeader.getMinBytesRcvd(), oprHeader.getMaxBytesRcvd(), oprHeader.getLatestGenerationStamp(), oprHeader.getRequestedChecksum(),
-		        oprHeader.getCachingStrategy());
-    }
+	void senderWriteBlock(DataOutputStream out, ExtendedBlock origBlk) throws IOException {
+		new Sender(out).writeBlock(origBlk, ((WriteOprHeader2_5) oprHeader).getStorageType(), oprHeader.getBlockToken(), oprHeader.getClientName(),
+		        oprHeader.getTargets(), ((WriteOprHeader2_5) oprHeader).getAllStorageTypes(), oprHeader.getSrcDataNode(), oprHeader.getStage(),
+		        oprHeader.getPipelineSize(), oprHeader.getMinBytesRcvd(), oprHeader.getMaxBytesRcvd(), oprHeader.getLatestGenerationStamp(),
+		        oprHeader.getRequestedChecksum(), oprHeader.getCachingStrategy());
+	}
 
 }

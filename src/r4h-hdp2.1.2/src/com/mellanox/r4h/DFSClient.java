@@ -253,7 +253,6 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory {
 	private static final DFSHedgedReadMetrics HEDGED_READ_METRIC = new DFSHedgedReadMetrics();
 	private static ThreadPoolExecutor HEDGED_READ_THREAD_POOL;
 	private ConcurrentLinkedQueue<JXIOClientResource> jxioResourcesQueue = new ConcurrentLinkedQueue<JXIOClientResource>();
-	
 
 	public DFSClientConfBridge getConf() {
 		return dfsClientConf;
@@ -638,7 +637,7 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory {
 			res.getMsgPool().deleteMsgPool();
 			res = jxioResourcesQueue.poll();
 		}
-    }
+	}
 
 	/**
 	 * Get the default block size for this cluster
@@ -1015,18 +1014,17 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory {
 		return open(src, buffersize, verifyChecksum);
 	}
 
-	  /**
-	   * Create an input stream that obtains a nodelist from the
-	   * namenode, and then reads from all the right places.  Creates
-	   * inner subclass of InputStream that does the right out-of-band
-	   * work.
-	   */
-	  public DFSInputStream open(String src, int buffersize, boolean verifyChecksum)
-	      throws IOException, UnresolvedLinkException {
-	    checkOpen();
-	    //    Get block info from namenode
-	    return new DFSInputStream(this, src, buffersize, verifyChecksum);
-	  }
+	/**
+	 * Create an input stream that obtains a nodelist from the
+	 * namenode, and then reads from all the right places. Creates
+	 * inner subclass of InputStream that does the right out-of-band
+	 * work.
+	 */
+	public DFSInputStream open(String src, int buffersize, boolean verifyChecksum) throws IOException, UnresolvedLinkException {
+		checkOpen();
+		// Get block info from namenode
+		return new DFSInputStream(this, src, buffersize, verifyChecksum);
+	}
 
 	/**
 	 * Get the namenode associated with this DFSClient object
@@ -1185,18 +1183,17 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory {
 			if (LOG.isTraceEnabled()) {
 				LOG.trace("Created msg pool: " + msgPool);
 			}
-			
+
 			R4HEventHandler eqh = new R4HEventHandler(null);
-			
+
 			res = new JXIOClientResource(eqh, msgPool);
-		} else if (LOG.isDebugEnabled()){
+		} else if (LOG.isDebugEnabled()) {
 			LOG.debug("Using cached JXIO resources");
 		}
-		
-		
+
 		return res;
-    }
-	
+	}
+
 	void returnJXIOResource(JXIOClientResource jxioResource) {
 		jxioResourcesQueue.add(jxioResource);
 	}

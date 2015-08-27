@@ -1,4 +1,4 @@
-package  org.apache.hadoop.hdfs;
+package org.apache.hadoop.hdfs;
 
 import java.lang.reflect.Method;
 
@@ -6,7 +6,7 @@ import org.apache.commons.logging.Log;
 import org.apache.hadoop.hdfs.MiniDFSNNTopology.NNConf;
 
 public class MiniDFSClusterBridge {
-	
+
 	public static int getAppendTestUtils_FILE_SIZE() {
 		return AppendTestUtil.FILE_SIZE;
 	}
@@ -30,9 +30,9 @@ public class MiniDFSClusterBridge {
 	public static int getNNConf_httpPort(NNConf nnConf) {
 		return nnConf.getHttpPort();
 	}
-	
+
 	public static Log getAppendTestUtilLOG() {
 		return AppendTestUtil.LOG;
 	}
-	
+
 }

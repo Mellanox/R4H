@@ -437,7 +437,7 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 					}
 					this.pipelineStatus = resp.getStatus();
 					this.firstBadLink = resp.getFirstBadLink();
-					needToReturnMsgToPool = false; //never return header msg to pool
+					needToReturnMsgToPool = false; // never return header msg to pool
 
 					if (this.pipelineStatus != SUCCESS) {
 						this.didHeaderFail = true;
@@ -879,7 +879,7 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 		public void run() {
 			boolean waslpib = false;
 			if (LOG.isTraceEnabled()) {
-				LOG.trace("Started running streamer with msg pool "+DFSOutputStream.this.msgPool);
+				LOG.trace("Started running streamer with msg pool " + DFSOutputStream.this.msgPool);
 			}
 
 			if (toPrintBreakdown) {
@@ -2619,7 +2619,7 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 		return fileId;
 	}
 
-	private Msg getMsg()  {
+	private Msg getMsg() {
 		Msg msg = null;
 		synchronized (DFSOutputStream.this.msgPool) {
 			while (msg == null) {
@@ -2627,10 +2627,10 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 				if (msg == null) {
 					LOG.warn(Thread.currentThread() + " " + toString() + " MsgPool " + msgPool + " is empty. Going to wait for Msg.");
 					try {
-	                    DFSOutputStream.this.msgPool.wait();
-                    } catch (InterruptedException e) {
-                    	throw new RuntimeException("Interrupted while waiting for free Msg",e);
-                    }
+						DFSOutputStream.this.msgPool.wait();
+					} catch (InterruptedException e) {
+						throw new RuntimeException("Interrupted while waiting for free Msg", e);
+					}
 				}
 			}
 		}

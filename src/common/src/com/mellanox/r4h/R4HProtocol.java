@@ -33,7 +33,6 @@ public class R4HProtocol {
 	public static final int CLIENT_MSGPOOL_SPARE = 8;
 	static final int CLIENT_MSG_POOL_IN_SIZE = ACK_SIZE;
 
-
 	public static String createSessionHash() {
 		long tid = Thread.currentThread().getId();
 		String pid = ManagementFactory.getRuntimeMXBean().getName();

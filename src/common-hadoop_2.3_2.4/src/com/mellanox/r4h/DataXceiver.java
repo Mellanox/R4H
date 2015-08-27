@@ -18,9 +18,9 @@ import static org.apache.hadoop.hdfs.protocol.datatransfer.DataTransferProtoUtil
 
 public class DataXceiver extends DataXceiverBase {
 
-  DataXceiver(DataXceiverServer dxcs, ServerPortalWorker spw, SessionKey sKey, R4HExecutor ioExec, R4HExecutor auxExec) {
-    super(dxcs, spw, sKey, ioExec, auxExec);
-  }
+	DataXceiver(DataXceiverServer dxcs, ServerPortalWorker spw, SessionKey sKey, R4HExecutor ioExec, R4HExecutor auxExec) {
+		super(dxcs, spw, sKey, ioExec, auxExec);
+	}
 
 	@Override
 	void parseOpWriteBlock(DataInputStream in) throws IOException {
@@ -33,10 +33,10 @@ public class DataXceiver extends DataXceiverBase {
 	}
 
 	@Override
-    void senderWriteBlock(DataOutputStream out, ExtendedBlock origBlk) throws IOException {
-	    new Sender(out).writeBlock(origBlk, oprHeader.getBlockToken(), oprHeader.getClientName(), oprHeader.getTargets(), oprHeader.getSrcDataNode(),
+	void senderWriteBlock(DataOutputStream out, ExtendedBlock origBlk) throws IOException {
+		new Sender(out).writeBlock(origBlk, oprHeader.getBlockToken(), oprHeader.getClientName(), oprHeader.getTargets(), oprHeader.getSrcDataNode(),
 		        oprHeader.getStage(), oprHeader.getPipelineSize(), oprHeader.getMinBytesRcvd(), oprHeader.getMaxBytesRcvd(),
 		        oprHeader.getLatestGenerationStamp(), oprHeader.getRequestedChecksum(), oprHeader.getCachingStrategy());
-    }
+	}
 
 }
