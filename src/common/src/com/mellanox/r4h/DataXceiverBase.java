@@ -514,11 +514,11 @@ abstract class DataXceiverBase {
 					} catch (IOException e) {
 						LOG.error("failed on async packet processing (last execution for packet): " + StringUtils.stringifyException(e));
 					} finally {
-						PipelineAck replyAck = new PipelineAck(seqNo, new Status[] { status });
+						PipelineAck replyAck = new R4HPipelineAck(seqNo, new Status[] { status });
 						pmc.setMessageAck(replyAck);
 					}
 				} else {
-					PipelineAck replyAck = new PipelineAck(seqNo, new Status[] { SUCCESS });
+					PipelineAck replyAck = new R4HPipelineAck(seqNo, new Status[] { SUCCESS });
 					pmc.setMessageAck(replyAck);
 				}
 			}
@@ -538,7 +538,7 @@ abstract class DataXceiverBase {
 		}
 		long expected = PipelineAck.UNKOWN_SEQNO;
 		long seqno = PipelineAck.UNKOWN_SEQNO;
-		PipelineAck ack = new PipelineAck();
+		R4HPipelineAck ack = new R4HPipelineAck();
 		try {
 			msg.getIn().position(0);
 			ack.readFields(new DataInputStream(new ByteBufferInputStream(msg.getIn())));
@@ -596,7 +596,7 @@ abstract class DataXceiverBase {
 		}
 	}
 
-	private PipelineAck preparePipelineAck(Msg origMsg, long expectedSeqno, PipelineAck ack, Status s) {
+	private PipelineAck preparePipelineAck(Msg origMsg, long expectedSeqno, R4HPipelineAck ack, Status s) {
 		// construct my ack message
 		Status[] replies = null;
 		short ackLen = oprHeader.getNumTargets() == 0 ? 0 : ack.getNumOfReplies();
@@ -605,7 +605,7 @@ abstract class DataXceiverBase {
 		for (int i = 0; i < ackLen; i++) {
 			replies[i + 1] = ack.getReply(i);
 		}
-		return new PipelineAck(expectedSeqno, replies, 0/* TODO: update totalAckTimeNanos for specific packet */);
+		return new R4HPipelineAck(expectedSeqno, replies, 0/* TODO: update totalAckTimeNanos for specific packet */);
 	}
 
 	private PipelineAck prepareBrokenPipelineAck(Msg origMsg, long expectedSeqno) {
@@ -614,7 +614,7 @@ abstract class DataXceiverBase {
 		replies = new Status[2];
 		replies[0] = SUCCESS;
 		replies[1] = ERROR;
-		return new PipelineAck(expectedSeqno, replies);
+		return new R4HPipelineAck(expectedSeqno, replies);
 	}
 
 	private void sendPktToPipeline(Msg mirror) {

@@ -63,18 +63,28 @@ public class R4HProtocol {
 	}
 
 	public static URI createInitialURI(DatanodeInfo[] targets, String hash) throws URISyntaxException {
-		String pipeline = Arrays.toString(targets).replace("[", "").replace("]", "").replace("", "").replace("\'", "").replace(",", ":")
-		        .replace(" ", "");
+		String pipeline = createPipelineString(targets);
 		return new URI(String.format("rdma://%s/?pipeline=%s&clientHash=%s", targets[0].getName(), pipeline, hash));
 	}
 
 	public static URI createPipelineURI(DatanodeInfo[] targets, String clientHash) throws URISyntaxException {
-		String pipeline = Arrays.toString(targets).replace("[", "").replace("]", "").replace("", "").replace("\'", "").replace(",", ":")
-		        .replace(" ", "");
+		String pipeline = createPipelineString(targets);
 		long tid = Thread.currentThread().getId();
 		String pid = ManagementFactory.getRuntimeMXBean().getName();
 
 		return new URI(String.format("rdma://%s/?pipeline=%s&sourcePID=%s&sourceTID=%d%s", targets[0].getName(), pipeline, pid, tid, clientHash));
+	}
+
+	private static String createPipelineString(DatanodeInfo[] targets){
+        if (targets == null || targets.length == 0)
+            return "";
+
+        StringBuilder b = new StringBuilder();
+        int targetsLength = targets.length;
+        for (int i = 0; i < targetsLength - 1 ; i++) {
+            b.append(targets[i].getName()).append(":");
+        }
+        return b.append(targets[targetsLength - 1].getName()).toString();
 	}
 
 	public static void wrappedSendResponse(ServerSession session, Msg message, Log log) {

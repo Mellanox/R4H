@@ -27,16 +27,23 @@
     <target name="hdp220">
 	<property name="hadoopdir" value="/.autodirect/acclgwork/ufa/HDFS/r4h-dist-jars/hdp2.2.0" />
 	<property name="matching-src" value="r4h-hdp2.2.0" />
-	<property name="matching-common" value="r4h-hdp2.2.0" /> <!-- HDP2.2 doesn't have a matching common yet, meanwhile matching-common=matching-src -->
+	<property name="matching-common" value="common-hadoop_2.5_2.6" />
 	<property name="jar-title" value="R4H-HDP2.2.0" />
 	<antcall target="build" />
     </target>
     <target name="cdh531">
-    <property name="hadoopdir" value="/.autodirect/acclgwork/ufa/HDFS/r4h-dist-jars/cdh5.3.1" />
-    <property name="matching-src" value="r4h-cdh5.3.1" />
-    <property name="matching-common" value="r4h-cdh5.3.1" />
-    <property name="jar-title" value="R4H-CDH5.3.1" />
-    <antcall target="build" />
+        <property name="hadoopdir" value="/.autodirect/acclgwork/ufa/HDFS/r4h-dist-jars/cdh5.3.1" />
+        <property name="matching-src" value="r4h-cdh5.3.1" />
+        <property name="matching-common" value="common-hadoop_2.5_2.6" />
+        <property name="jar-title" value="R4H-CDH5.3.1" />
+        <antcall target="build" />
+    </target>
+    <target name="hdp230">
+        <property name="hadoopdir" value="/.autodirect/acclgwork/ufa/HDFS/r4h-dist-jars/hdp2.3.0" />
+        <property name="matching-src" value="r4h-hdp2.3.0" />
+        <property name="matching-common" value="r4h-hdp2.3.0" /> <!-- HDP2.3 doesn't have a matching common yet, meanwhile matching-common=matching-src -->
+        <property name="jar-title" value="R4H-HDP2.3.0" />
+        <antcall target="build" />
     </target>
     <target name="init">
         <mkdir dir="build"/>
