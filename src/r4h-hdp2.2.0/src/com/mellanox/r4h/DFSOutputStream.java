@@ -702,7 +702,9 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 		 */
 		@Override
 		public void onMsgError(Msg msg, EventReason reason) {
-			returnMsgToPool(msg);
+			if (msg != streamer.headerMsg) {
+				returnMsgToPool(msg);
+			}
 			DFSOutputStream.LOG.error(DFSOutputStream.this.toString()
 			        + String.format("Msg error occurred: reason=%s, countPacketArrived=%d", reason, countPacketArrived));
 			if ((this.clientSession != null) && !this.clientSession.getIsClosing()) {
