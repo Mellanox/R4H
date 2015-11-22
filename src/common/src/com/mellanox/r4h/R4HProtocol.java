@@ -1,6 +1,5 @@
 package com.mellanox.r4h;
 
-import java.io.UnsupportedEncodingException;
 import java.lang.management.ManagementFactory;
 import java.net.InetAddress;
 import java.net.URI;
@@ -8,7 +7,6 @@ import java.net.URISyntaxException;
 import java.net.UnknownHostException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.util.Arrays;
 
 import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
 

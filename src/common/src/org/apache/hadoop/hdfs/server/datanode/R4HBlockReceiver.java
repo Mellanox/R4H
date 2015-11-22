@@ -12,8 +12,8 @@ import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.nio.ByteBuffer;
-import org.apache.hadoop.record.Utils;
 
+import org.apache.hadoop.io.WritableUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hdfs.protocol.ExtendedBlock;
@@ -118,7 +118,7 @@ public class R4HBlockReceiver extends R4HBlockReceiverBase implements BRBInetrfa
 	public void processPacket(Msg msg) throws IOException {
 		msg.getIn().clear();
 		DataInputStream in = new DataInputStream(new ByteBufferInputStream(msg.getIn()));
-		int headerStart = Utils.readVInt(in);
+		int headerStart = WritableUtils.readVInt(in);
 		msg.getIn().position(headerStart);
 		in = new DataInputStream(new BufferedInputStream(new ByteBufferInputStream(msg.getIn()), 512));
 

@@ -89,7 +89,7 @@ import org.apache.hadoop.io.EnumSetWritable;
 import org.apache.hadoop.io.IOUtils;
 import org.apache.hadoop.ipc.RemoteException;
 import org.apache.hadoop.net.NetUtils;
-import org.apache.hadoop.record.Utils;
+import org.apache.hadoop.io.WritableUtils;
 import org.apache.hadoop.security.AccessControlException;
 import org.apache.hadoop.security.token.Token;
 import org.apache.hadoop.util.Daemon;
@@ -332,7 +332,7 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable, CanSetD
 			if (headerStart > 0) {
 				byteBuff.position(0);
 				DataOutput out = new DataOutputStream(new ByteBufferOutputStream(byteBuff));
-				Utils.writeVInt(out, headerStart);
+				WritableUtils.writeVInt(out, headerStart);
 			}
 
 			int sendLen = header.getSerializedSize() + checksumLen + dataLen + headerStart;
