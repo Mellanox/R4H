@@ -68,6 +68,7 @@ import org.apache.hadoop.hdfs.security.token.block.BlockTokenSecretManager;
  */
 abstract class DataXceiverBase {
 	private final static Log LOG = LogFactory.getLog(DataXceiverBase.class);
+	private static final int NUM_OF_BLOCK_RECEIVER_CREATION_ATTEMPTS = 3;
 	private final DataXceiverServer dxcs;
 	ClientSession clientSession;
 	private final DataNodeBridge dnBridge;
@@ -375,12 +376,7 @@ abstract class DataXceiverBase {
 
 			if (oprHeader.isDatanode() || oprHeader.getStage() != BlockConstructionStage.PIPELINE_CLOSE_RECOVERY) {
 				// open a block receiver
-				try {
-					blockReceiver = new R4HBlockReceiver(spw.getIOBufferSupplier(), oprHeader, in, serverSession.toString(), dnBridge, ioExecutor,
-					        msgCallbacks);
-				} catch (SecurityException e) {
-					throw new IOException("Failed on BlockReceiver creation", e);
-				}
+				createBlockReciver(in, NUM_OF_BLOCK_RECEIVER_CREATION_ATTEMPTS);
 
 				if (LOG.isTraceEnabled()) {
 					LOG.trace("After BlockReceiver creation: " + blockReceiver);
@@ -813,6 +809,25 @@ abstract class DataXceiverBase {
 		Boolean dropBehind = strategy.hasDropBehind() ? strategy.getDropBehind() : null;
 		Long readahead = strategy.hasReadahead() ? strategy.getReadahead() : null;
 		return new CachingStrategy(dropBehind, readahead);
+	}
+
+	// Sometimes, creating a BlockReciver is accompanied by a failure of the DURefreshThread (du: cannot access error)
+	// which lead to expected shutdown of the connection. another attempt to create the BlockRevicer should prevent this shutdown.
+	// For more info see HADOOP-8640.
+	private void createBlockReciver(DataInputStream in, int attempts) throws NoSuchFieldException, NoSuchMethodException, IllegalArgumentException, IllegalAccessException, IOException {
+		try {
+			blockReceiver = new R4HBlockReceiver(spw.getIOBufferSupplier(), oprHeader, in, serverSession.toString(), dnBridge, ioExecutor,
+			        msgCallbacks);
+		} catch (IOException e) {
+			attempts--;
+			LOG.warn(String.format("Got exception in BlockReceiver constructor - %d attempts remaining", attempts), e);
+			if (attempts <= 0) {
+				LOG.error("Failed on BlockReceiver creation, no attempts remaining");
+				throw e;
+			} else {
+				createBlockReciver(in, attempts);
+			}
+		}
 	}
 
 	abstract void parseOpWriteBlock(DataInputStream in) throws IOException;
