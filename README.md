@@ -1,3 +1,5 @@
+# This repository is DEPRECATED.
+
 # R4H
 RDMA for HDFS (R4H) is a plugin for Hadoop Distributed FileSystem (HDFS) which accelerates HDFS by using RDMA (Remote Direct Memory Access) technology.  
 R4H enables HDFS write operations over RDMA and is tested using Mellanox ConnectX® interconnect for Ethernet and InfiniBand fabrics.  
